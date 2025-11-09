@@ -1,0 +1,80 @@
+# Composer
+/vendor/
+composer.phar
+composer.lock
+
+# PHP 编译和缓存文件
+*.cache
+*.log
+.php_cs.cache
+.php-cs-fixer.cache
+.phpunit.result.cache
+
+# 测试相关
+/tests/coverage/
+/tests/reports/
+/phpunit.xml
+/.phpunit.result.cache
+
+# 静态分析工具
+/phpstan.neon
+/psalm.xml
+/phpmd.xml
+/.phpstan-cache/
+
+# IDE 和编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# 临时文件
+*.tmp
+*.temp
+/temp/
+/tmp/
+
+# 构建产物
+/build/
+/dist/
+*.phar
+
+# 配置文件（可能包含敏感信息）
+.env
+.env.local
+.env.*.local
+config.local.php
+
+# 系统文件
+*.pid
+*.lock
+
+# 文档构建
+/docs/_build/
+/docs/html/
+
+# 调试和性能分析
+xdebug profiler
+*.xhprof
+
+# 操作系统生成的文件
+.DS_Store?
+ehthumbs.db
+Icon?
+Thumbs.db
+
+# 项目特定忽略
+# 如果有示例配置文件
+/examples/config.local.php
+# 如果有测试数据
+/tests/data/*.torrent
+/tests/data/*.log
+
+# 项目特定忽略
+# qBittorrent 相关文档和源码
+/qbit_wiki/
+qBittorrent/
+
