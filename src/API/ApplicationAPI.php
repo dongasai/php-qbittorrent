@@ -29,7 +29,7 @@ final class ApplicationAPI
     public function getVersion(): string
     {
         $response = $this->transport->request('GET', '/api/v2/app/version');
-        return $response[0] ?? 'unknown';
+        return $response['version'] ?? $response[0] ?? 'unknown';
     }
 
     /**
@@ -41,7 +41,7 @@ final class ApplicationAPI
     public function getWebApiVersion(): string
     {
         $response = $this->transport->request('GET', '/api/v2/app/webapiVersion');
-        return $response[0] ?? 'unknown';
+        return $response['version'] ?? $response[0] ?? 'unknown';
     }
 
     /**
@@ -224,7 +224,7 @@ final class ApplicationAPI
 
         return [
             'web_ui_domain_list' => $preferences['web_ui_domain_list'] ?? '*',
-            'web_ui_address' => $preferences['web_ui_address'] => '*',
+            'web_ui_address' => $preferences['web_ui_address'] ?? '*',
             'web_ui_port' => (int) ($preferences['web_ui_port'] ?? 8080),
             'web_ui_upnp' => (bool) ($preferences['web_ui_upnp'] ?? true),
             'web_ui_username' => $preferences['web_ui_username'] ?? '',
@@ -254,7 +254,7 @@ final class ApplicationAPI
             'add_trackers' => $preferences['add_trackers'] ?? '',
             'alternative_webui_enabled' => (bool) ($preferences['alternative_webui_enabled'] ?? false),
             'alternative_webui_path' => $preferences['alternative_webui_path'] ?? '',
-            'current_network_interface' => $preferences['current_network_interface'] => '',
+            'current_network_interface' => $preferences['current_network_interface'] ?? '',
             'save_path_changed' => (bool) ($preferences['save_path_changed'] ?? false),
             'save_path_history' => $preferences['save_path_history'] ?? [],
             'banned_IPs' => $preferences['banned_IPs'] ?? [],

@@ -205,7 +205,7 @@ final class TransferAPI
     public function pauseAllDownloads(): bool
     {
         try {
-            $this->transport->request('POST', '/api/v2/torrents/pause', [
+            $this->transport->request('POST', '/api/v2/torrents/stop', [
                 'form_params' => ['hashes' => 'all']
             ]);
             return true;
@@ -222,7 +222,7 @@ final class TransferAPI
     public function resumeAllDownloads(): bool
     {
         try {
-            $this->transport->request('POST', '/api/v2/torrents/resume', [
+            $this->transport->request('POST', '/api/v2/torrents/start', [
                 'form_params' => ['hashes' => 'all']
             ]);
             return true;
@@ -240,7 +240,7 @@ final class TransferAPI
     public function toggleAlternativeSpeedLimits(bool $enabled): bool
     {
         try {
-            $endpoint = $enabled ? '/api/v2/transfer/speedLimitsMode' : '/api/v2/transfer/speedLimitsMode';
+            $endpoint = $enabled ? '/api/v2/transfer/speedLimitsMode' : '/api/v2/transfer/toggleSpeedLimitsMode';
             $this->transport->request('POST', $endpoint);
             return true;
         } catch (ClientException $e) {
@@ -366,6 +366,54 @@ final class TransferAPI
                 'dht_nodes' => 0,
             ];
         }
+    }
+
+    /**
+     * 获取下载速度限制
+     *
+     * @return int 下载速度限制（字节/秒），-1表示无限制
+     * @throws ClientException 获取失败
+     */
+    public function getDownloadLimit(): int
+    {
+        $preferences = $this->transport->request('GET', '/api/v2/app/preferences');
+        return (int) ($preferences['dl_limit'] ?? -1);
+    }
+
+    /**
+     * 获取上传速度限制
+     *
+     * @return int 上传速度限制（字节/秒），-1表示无限制
+     * @throws ClientException 获取失败
+     */
+    public function getUploadLimit(): int
+    {
+        $preferences = $this->transport->request('GET', '/api/v2/app/preferences');
+        return (int) ($preferences['up_limit'] ?? -1);
+    }
+
+    /**
+     * 封禁指定的peers
+     *
+     * @param string $hash Torrent hash
+     * @param array $peers 要封禁的peer列表，格式：['ip:port', 'ip:port', ...]
+     * @return bool 操作是否成功
+     * @throws ClientException 操作失败
+     */
+    public function banPeers(string $hash, array $peers): bool
+    {
+        if (empty($peers)) {
+            return false;
+        }
+
+        $this->transport->request('POST', '/api/v2/torrents/banPeers', [
+            'form_params' => [
+                'hash' => $hash,
+                'peers' => implode('|', $peers)
+            ]
+        ]);
+
+        return true;
     }
 
     /**

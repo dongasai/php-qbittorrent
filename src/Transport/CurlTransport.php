@@ -88,7 +88,7 @@ final class CurlTransport implements TransportInterface
         }
 
         $response = $this->sendRequest($request);
-        return $this->parseResponse($response);
+        return $this->parseResponse($response, (string) $request->getUri());
     }
 
     public function sendRequest(RequestInterface $request): ResponseInterface
@@ -100,7 +100,7 @@ final class CurlTransport implements TransportInterface
             CURLOPT_URL => (string) $request->getUri(),
             CURLOPT_CUSTOMREQUEST => $request->getMethod(),
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HEADER => false,
+            CURLOPT_HEADER => true,
             CURLOPT_TIMEOUT => $this->timeout,
             CURLOPT_CONNECTTIMEOUT => $this->connectTimeout,
             CURLOPT_USERAGENT => $this->userAgent,
@@ -117,6 +117,12 @@ final class CurlTransport implements TransportInterface
                 $headers[] = "{$name}: {$value}";
             }
         }
+
+        // 添加认证cookie
+        if ($this->cookie) {
+            $headers[] = "Cookie: {$this->cookie}";
+        }
+
         $options[CURLOPT_HTTPHEADER] = $headers;
 
         // 设置请求体
@@ -156,19 +162,27 @@ final class CurlTransport implements TransportInterface
             throw $this->createNetworkException($errno, $error, (string) $request->getUri(), $request->getMethod());
         }
 
+        // 分离header和body
+        if ($responseBody === false) {
+            $responseBody = '';
+        }
+
+        $headerSize = curl_getinfo($curl, CURLINFO_HEADER_SIZE);
+        $responseHeaders = substr($responseBody, 0, $headerSize);
+        $responseBody = substr($responseBody, $headerSize);
+
+        // 处理cookie
+        $this->handleCookies($responseHeaders);
+
         // 创建响应
         $factory = new Psr17Factory();
         $response = $factory->createResponse($this->lastResponseCode);
 
-        // 设置响应头
-        if (isset($info['content_type'])) {
-            $response = $response->withHeader('Content-Type', $info['content_type']);
-        }
+        // 解析响应头
+        $this->parseHeaders($response, $responseHeaders);
 
         // 设置响应体
-        if ($responseBody !== false) {
-            $response = $response->withBody($factory->createStream($responseBody));
-        }
+        $response = $response->withBody($factory->createStream($responseBody));
 
         return $response;
     }
@@ -262,14 +276,15 @@ final class CurlTransport implements TransportInterface
     /**
      * 解析响应数据
      */
-    private function parseResponse(ResponseInterface $response): array
+    private function parseResponse(ResponseInterface $response, string $uri = ''): array
     {
         $statusCode = $response->getStatusCode();
         $body = (string) $response->getBody();
 
         // 处理认证失败
         if ($statusCode === 401 || $statusCode === 403) {
-            throw AuthenticationException::accessDenied((string) $response->getRequestUri());
+            $uri = $this->getBaseUrl() ? $this->getBaseUrl() : 'unknown';
+            throw AuthenticationException::accessDenied($uri);
         }
 
         // 处理客户端错误
@@ -290,18 +305,83 @@ final class CurlTransport implements TransportInterface
         // 解析JSON响应
         $data = json_decode($body, true);
         if (json_last_error() !== JSON_ERROR_NONE) {
+            // 对于特定的端点，允许非JSON响应
+            if (str_contains($uri, '/auth/login')) {
+                // 登录端点可能返回非JSON内容，检查状态码
+                if ($statusCode === 200) {
+                    return [];
+                }
+            }
+
+            // 对于版本端点和add torrent端点，允许纯文本响应
+            if (str_contains($uri, '/app/version') ||
+                str_contains($uri, '/app/webapiVersion') ||
+                str_contains($uri, '/torrents/add')) {
+                // 这些端点可能返回纯文本或空响应
+                $trimmedBody = trim($body);
+                return empty($trimmedBody) ? [] : [$trimmedBody];
+            }
+
             throw new ClientException(
                 "JSON解析失败: " . json_last_error_msg(),
                 'JSON_PARSE_ERROR',
                 [
                     'json_error' => json_last_error(),
                     'json_error_msg' => json_last_error_msg(),
-                    'raw_response' => $body
+                    'raw_response' => $body,
+                    'uri' => $uri
                 ]
             );
         }
 
         return $data;
+    }
+
+    /**
+     * 处理响应中的Cookie
+     */
+    private function handleCookies(string $responseHeaders): void
+    {
+        $headers = explode("\r\n", $responseHeaders);
+        foreach ($headers as $header) {
+            if (str_starts_with(strtolower($header), 'set-cookie:')) {
+                $cookieLine = substr($header, 11); // 移除 'Set-Cookie:'
+                $parts = explode(';', $cookieLine);
+                $cookiePart = trim($parts[0]);
+
+                if (str_contains($cookiePart, '=')) {
+                    list($name, $value) = explode('=', $cookiePart, 2);
+
+                    // 如果是SID cookie，保存到认证信息中
+                    if (trim($name) === 'SID') {
+                        $this->cookie = trim($cookiePart);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 解析响应头
+     */
+    private function parseHeaders(ResponseInterface $response, string $responseHeaders): void
+    {
+        $headers = explode("\r\n", $responseHeaders);
+        $factory = new Psr17Factory();
+
+        foreach ($headers as $headerLine) {
+            if (empty($headerLine) || str_starts_with($headerLine, 'HTTP/')) {
+                continue;
+            }
+
+            $parts = explode(':', $headerLine, 2);
+            if (count($parts) === 2) {
+                $name = trim($parts[0]);
+                $value = trim($parts[1]);
+                $response = $response->withHeader($name, $value);
+            }
+        }
     }
 
     /**

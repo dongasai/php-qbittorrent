@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="PhpQbittorrent\Tests\Unit\Model\TorrentInfoV2Test" file="/data/dongasai/qbittorrent_mcp/php_qbittirrent/tests/Unit/Model/TorrentInfoV2Test.php" tests="1" assertions="0" errors="1" failures="0" skipped="0" time="0.006630">
+    <testcase name="testFromArray" file="/data/dongasai/qbittorrent_mcp/php_qbittirrent/tests/Unit/Model/TorrentInfoV2Test.php" line="18" class="PhpQbittorrent\Tests\Unit\Model\TorrentInfoV2Test" classname="PhpQbittorrent.Tests.Unit.Model.TorrentInfoV2Test" assertions="0" time="0.006630">
+      <error type="Error">PhpQbittorrent\Tests\Unit\Model\TorrentInfoV2Test::testFromArray
+Error: Class "PhpQbittorrent\Model\TorrentInfoV2" not found
+
+/data/dongasai/qbittorrent_mcp/php_qbittirrent/tests/Unit/Model/TorrentInfoV2Test.php:38</error>
+    </testcase>
+  </testsuite>
+</testsuites>

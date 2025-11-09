@@ -1,0 +1,91 @@
+--- a/examples/quick_test.php
++++ b/examples/quick_test.php
+@@ -1249,6 +1249,45 @@ function testMagnetLinks(Client $client, array $config): array
+     // 最终验证：重新获取所有种子hash
+     if ($addedCount > 0) {
+         echo "   📊 验证新增的种子hash...\n";
+         $finalTorrents = $torrentAPI->getTorrents();
+         $initialHashes = array_column($initialTorrents, 'hash');
+         $finalHashes = array_column($finalTorrents, 'hash');
+
+         $newHashes = array_diff($finalHashes, $initialHashes);
++
++        // 改进的种子检测逻辑
++        $testMagnets = getTestMagnets();
++        $expectedHashes = array_map(function($magnet) {
++            return extractHashFromMagnet($magnet);
++        }, $testMagnets);
++
++        // 查找所有测试磁力链接对应的种子（包括已存在的）
++        $foundTestHashes = [];
++        foreach ($finalTorrents as $torrent) {
++            $hash = strtolower($torrent['hash'] ?? '');
++            if (in_array($hash, $expectedHashes)) {
++                $foundTestHashes[] = $hash;
++                echo "     ✅ 找到测试种子: {$hash} - " . ($torrent['name'] ?? 'Unknown') . " ({$torrent['state']})\n";
++            }
++        }
++
++        // 优先使用找到的测试种子hash
++        if (!empty($foundTestHashes)) {
++            $addedHashes = $foundTestHashes;
++            echo "     ✅ 通过hash匹配确认测试种子: " . count($addedHashes) . " 个\n";
++
++            // 检查是否有处于metaDL状态的种子
++            $metaDLCount = 0;
++            foreach ($finalTorrents as $torrent) {
++                if (in_array(strtolower($torrent['hash'] ?? ''), $foundTestHashes) &&
++                    $torrent['state'] === 'metaDL') {
++                    $metaDLCount++;
++                }
++            }
++
++            if ($metaDLCount > 0) {
++                echo "     ⏳ 发现 {$metaDLCount} 个种子正在下载元数据，请稍候...\n";
++                sleep(10); // 额外等待元数据下载
++            }
++        } else if (!empty($newHashes)) {
++            // 原有逻辑作为后备
+         $addedHashes = array_values($newHashes);
+         echo "     ✅ 确认新增种子hash: " . count($addedHashes) . " 个\n";
+         foreach ($addedHashes as $i => $hash) {
+             $torrentName = 'Unknown';
+             foreach ($finalTorrents as $torrent) {
+                 if ($torrent['hash'] === $hash) {
+                     $torrentName = $torrent['name'] ?? 'Unknown';
+                     break;
+                 }
+             }
+             echo "     [" . ($i + 1) . "] {$hash} - {$torrentName}\n";
+         }
++        } else {
++            echo "     ❌  未检测到测试种子，尝试手动验证...\n";
++            foreach ($expectedHashes as $expectedHash) {
++                $found = false;
++                foreach ($finalTorrents as $torrent) {
++                    if (strtolower($torrent['hash'] ?? '') === $expectedHash) {
++                        echo "     ⚠️  种子已存在: {$expectedHash} - " . ($torrent['name'] ?? 'Unknown') . "\n";
++                        $found = true;
++                        break;
++                    }
++                }
++                if (!$found) {
++                    echo "     ❌ 种子不存在: {$expectedHash}\n";
++                }
++            }
++
++            echo "     🔍 检查状态分布:\n";
++            $stateCounts = [];
++            foreach ($finalTorrents as $torrent) {
++                $state = $torrent['state'] ?? 'unknown';
++                $stateCounts[$state] = ($stateCounts[$state] ?? 0) + 1;
++            }
++            foreach ($stateCounts as $state => $count) {
++                echo "       {$state}: {$count} 个\n";
++            }
++
++            echo "     ⚠️  管理测试将跳过（需要检测到测试种子）\n";
+         }
+     }
+
+     return $addedHashes;

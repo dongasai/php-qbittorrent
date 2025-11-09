@@ -62,21 +62,21 @@ class AuthenticationException extends ClientException
 
     public function isInvalidCredentials(): bool
     {
-        return $this->errorCode === 'INVALID_CREDENTIALS' ||
+        return $this->getErrorCode() === 'INVALID_CREDENTIALS' ||
                str_contains(strtolower($this->getMessage()), 'invalid') ||
                str_contains(strtolower($this->getMessage()), 'wrong');
     }
 
     public function isSessionExpired(): bool
     {
-        return $this->errorCode === 'SESSION_EXPIRED' ||
+        return $this->getErrorCode() === 'SESSION_EXPIRED' ||
                str_contains(strtolower($this->getMessage()), 'expired') ||
                str_contains(strtolower($this->getMessage()), 'session');
     }
 
     public function isAccessDenied(): bool
     {
-        return $this->errorCode === 'ACCESS_DENIED' ||
+        return $this->getErrorCode() === 'ACCESS_DENIED' ||
                str_contains(strtolower($this->getMessage()), 'access denied') ||
                str_contains(strtolower($this->getMessage()), 'forbidden');
     }
