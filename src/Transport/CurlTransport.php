@@ -163,6 +163,15 @@ final class CurlTransport implements TransportInterface
 
         $this->lastResponseCode = $info['http_code'] ?? null;
 
+        // 分离header和body（需要在curl_close之前获取header_size）
+        if ($responseBody === false) {
+            $responseBody = '';
+        }
+
+        $headerSize = $info['header_size'] ?? 0;
+        $responseHeaders = substr($responseBody, 0, $headerSize);
+        $responseBody = substr($responseBody, $headerSize);
+
         curl_close($curl);
 
         // 处理cURL错误
@@ -171,24 +180,26 @@ final class CurlTransport implements TransportInterface
             throw $this->createNetworkException($errno, $error, (string) $request->getUri(), $request->getMethod());
         }
 
-        // 分离header和body
-        if ($responseBody === false) {
-            $responseBody = '';
-        }
-
-        $headerSize = curl_getinfo($curl, CURLINFO_HEADER_SIZE);
-        $responseHeaders = substr($responseBody, 0, $headerSize);
-        $responseBody = substr($responseBody, $headerSize);
+        // 解析响应头
+        $parsedHeaders = $this->parseResponseHeaders($responseHeaders);
 
         // 处理cookie
-        $this->handleCookies($responseHeaders);
+        if (isset($parsedHeaders['set-cookie'])) {
+            foreach ($parsedHeaders['set-cookie'] as $setCookieHeader) {
+                $this->handleCookies($setCookieHeader);
+            }
+        }
 
         // 创建响应
         $factory = new Psr17Factory();
         $response = $factory->createResponse($this->lastResponseCode);
 
-        // 解析响应头
-        $this->parseHeaders($response, $responseHeaders);
+        // 设置响应头
+        foreach ($parsedHeaders as $name => $value) {
+            if ($name !== 'set-cookie') {
+                $response = $response->withHeader($name, $value);
+            }
+        }
 
         // 设置响应体
         $response = $response->withBody($factory->createStream($responseBody));
@@ -285,15 +296,44 @@ final class CurlTransport implements TransportInterface
     }
 
     /**
+     * 解析响应头（从cURL响应中提取所有Set-Cookie头）
+     */
+    private function parseResponseHeaders(string $rawHeaders): array
+    {
+        $headers = [];
+        $lines = explode("\r\n", $rawHeaders);
+
+        foreach ($lines as $line) {
+            if (empty($line) || str_starts_with($line, 'HTTP/')) {
+                continue;
+            }
+
+            $parts = explode(':', $line, 2);
+            if (count($parts) === 2) {
+                $name = strtolower(trim($parts[0]));
+                $value = trim($parts[1]);
+
+                if ($name === 'set-cookie') {
+                    if (!isset($headers['set-cookie'])) {
+                        $headers['set-cookie'] = [];
+                    }
+                    $headers['set-cookie'][] = $value;
+                } else {
+                    $headers[$name] = $value;
+                }
+            }
+        }
+
+        return $headers;
+    }
+
+    /**
      * 解析响应数据
      */
     private function parseResponse(ResponseInterface $response, string $uri = ''): array
     {
         $statusCode = $response->getStatusCode();
         $body = (string) $response->getBody();
-
-        // 处理响应头中的Cookie（特别是登录后的SID）
-        $this->handleCookies($response->getHeaderLine('Set-Cookie'));
 
         // 处理认证失败
         if ($statusCode === 401 || $statusCode === 403) {
@@ -356,48 +396,41 @@ final class CurlTransport implements TransportInterface
      */
     private function handleCookies(string $setCookieHeader): void
     {
+        // 临时调试 - 记录调用
+        error_log("handleCookies called with: " . $setCookieHeader);
+
         if (empty($setCookieHeader)) {
             return;
         }
 
-        // 处理 Set-Cookie 头
-        $cookieParts = explode(';', $setCookieHeader);
-        $cookiePart = trim($cookieParts[0]);
+        // 处理多个 Set-Cookie 头（用换行符分隔）
+        $cookieHeaders = preg_split('/\r\n|\r|\n/', $setCookieHeader);
 
-        if (str_contains($cookiePart, '=')) {
-            list($name, $value) = explode('=', $cookiePart, 2);
-
-            // 如果是SID cookie，保存到认证信息中
-            if (trim($name) === 'SID') {
-                $this->cookie = trim($cookiePart);
-                // 保存完整的 cookie 字符串，包括域名和路径
-                $this->cookie = $setCookieHeader;
-            }
-        }
-    }
-
-    /**
-     * 解析响应头
-     */
-    private function parseHeaders(ResponseInterface $response, string $responseHeaders): void
-    {
-        $headers = explode("\r\n", $responseHeaders);
-        $factory = new Psr17Factory();
-
-        foreach ($headers as $headerLine) {
-            if (empty($headerLine) || str_starts_with($headerLine, 'HTTP/')) {
+        foreach ($cookieHeaders as $header) {
+            $header = trim($header);
+            if (empty($header) || !str_contains($header, '=')) {
                 continue;
             }
 
-            $parts = explode(':', $headerLine, 2);
-            if (count($parts) === 2) {
-                $name = trim($parts[0]);
-                $value = trim($parts[1]);
-                $response = $response->withHeader($name, $value);
+            // 处理 Set-Cookie 头
+            $cookieParts = explode(';', $header);
+            $cookiePart = trim($cookieParts[0]);
+
+            if (str_contains($cookiePart, '=')) {
+                list($name, $value) = explode('=', $cookiePart, 2);
+
+                // 如果是SID cookie，保存到认证信息中
+                if (trim($name) === 'SID') {
+                    $this->cookie = trim($cookiePart);
+                    error_log("Found and set SID cookie: " . $this->cookie);
+                    // 只保存 SID=value 部分，不包括其他属性
+                    break;
+                }
             }
         }
     }
 
+  
     /**
      * 创建网络异常
      */

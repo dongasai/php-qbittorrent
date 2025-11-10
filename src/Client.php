@@ -120,9 +120,22 @@ class Client
                 'password' => $this->password,
             ]);
 
-            // 对于登录端点，成功时返回空数组，失败时会抛出异常
-        $this->authenticated = true;
-        return true;
+            // 获取认证cookie并设置到传输层
+            $cookie = $this->transport->getAuthentication();
+            if ($cookie) {
+                $this->authenticated = true;
+                return true;
+            }
+
+            // 如果没有获取到cookie，可能是登录失败
+            throw new AuthenticationException(
+                '登录失败：未能获取认证Cookie',
+                'AUTH_FAILED',
+                ['username' => $this->username],
+                $this->username,
+                'invalid_credentials'
+            );
+
         } catch (NetworkException $e) {
             throw new AuthenticationException(
                 '认证时发生网络错误: ' . $e->getMessage(),
@@ -559,6 +572,65 @@ class Client
         }
 
         return new self($baseUrl, $username, $password, $transport);
+    }
+
+    /**
+     * 魔术方法 - 支持动态访问应用API方法
+     *
+     * @param string $name 方法名
+     * @param array $arguments 参数
+     * @return mixed
+     * @throws \Exception 方法不存在时抛出异常
+     */
+    public function __call(string $name, array $arguments)
+    {
+        // 支持应用API方法的魔术调用
+        $applicationAPI = $this->application();
+
+        // 检查方法是否存在
+        if (method_exists($applicationAPI, $name)) {
+            return $applicationAPI->$name(...$arguments);
+        }
+
+        throw new \Exception("方法 {$name} 不存在");
+    }
+
+    /**
+     * 魔术方法 - 支持动态访问应用属性
+     *
+     * @param string $name 属性名
+     * @return mixed
+     * @throws \Exception 属性不存在时抛出异常
+     */
+    public function __get(string $name)
+    {
+        try {
+            $applicationAPI = $this->application();
+
+            // 支持一些常用的属性访问
+            switch ($name) {
+                case 'version':
+                    $versionResponse = $applicationAPI->getVersion(\PhpQbittorrent\Request\Application\GetVersionRequest::create());
+                    return $versionResponse->isSuccess() ? $versionResponse->getVersion() : null;
+
+                case 'webApiVersion':
+                    $versionResponse = $applicationAPI->getWebApiVersion(\PhpQbittorrent\Request\Application\GetWebApiVersionRequest::create());
+                    return $versionResponse->isSuccess() ? $versionResponse->getVersion() : null;
+
+                case 'buildInfo':
+                    $buildResponse = $applicationAPI->getBuildInfo(\PhpQbittorrent\Request\Application\GetBuildInfoRequest::create());
+                    return $buildResponse->isSuccess() ? $buildResponse->getBuildInfo() : null;
+
+                case 'preferences':
+                    $preferencesResponse = $applicationAPI->getPreferences(\PhpQbittorrent\Request\Application\GetPreferencesRequest::create());
+                    return $preferencesResponse->isSuccess() ? $preferencesResponse->getPreferences() : null;
+
+                default:
+                    throw new \Exception("属性 {$name} 不存在");
+            }
+        } catch (\Exception $e) {
+            throw new \Exception("获取属性 {$name} 失败: " . $e->getMessage(), 0, $e);
+        }
     }
 
     /**
