@@ -789,7 +789,7 @@ function testTorrentList(Client $client)
             $torrentArray = iterator_to_array($torrents);
             for ($i = 0; $i < $displayCount; $i++) {
                 $torrent = $torrentArray[$i];
-                echo sprintf("       [%d] %s\n", $i + 1, $torrent->getName());
+                // echo sprintf("       [%d] %s\n", $i + 1, $torrent->getName()); 不输出名字
                 echo sprintf(
                     "          状态: %s | 进度: %.1f%% | 大小: %s\n",
                     $torrent->getState()->value,
