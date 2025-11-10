@@ -116,8 +116,10 @@ class Client
     {
         try {
             $response = $this->transport->request('POST', '/api/v2/auth/login', [
-                'username' => $this->username,
-                'password' => $this->password,
+                'form_params' => [
+                    'username' => $this->username,
+                    'password' => $this->password,
+                ]
             ]);
 
             // 获取认证cookie并设置到传输层
@@ -478,6 +480,18 @@ class Client
                 $serverInfo['build_info'] = null;
             }
 
+            // 尝试获取偏好设置（可选）
+            try {
+                $preferencesResponse = $applicationAPI->getPreferences(\PhpQbittorrent\Request\Application\GetPreferencesRequest::create());
+                if ($preferencesResponse->isSuccess()) {
+                    $data = $preferencesResponse->getData();
+                    $serverInfo['preferences'] = $data['preferences'] ?? [];
+                }
+            } catch (\Exception $e) {
+                // 偏好设置获取失败不影响主要功能
+                $serverInfo['preferences'] = [];
+            }
+
             return $serverInfo;
 
         } catch (NetworkException $e) {
@@ -623,7 +637,11 @@ class Client
 
                 case 'preferences':
                     $preferencesResponse = $applicationAPI->getPreferences(\PhpQbittorrent\Request\Application\GetPreferencesRequest::create());
-                    return $preferencesResponse->isSuccess() ? $preferencesResponse->getPreferences() : null;
+                    if ($preferencesResponse->isSuccess()) {
+                        $data = $preferencesResponse->getData();
+                        return $data['preferences'] ?? null;
+                    }
+                    return null;
 
                 default:
                     throw new \Exception("属性 {$name} 不存在");

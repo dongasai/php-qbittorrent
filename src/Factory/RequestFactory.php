@@ -37,6 +37,8 @@ use PhpQbittorrent\Request\Search\GetSearchStatusRequest;
 use PhpQbittorrent\Request\Search\GetSearchResultsRequest;
 use PhpQbittorrent\Request\Search\DeleteSearchRequest;
 
+use PhpQbittorrent\Enum\TorrentFilter;
+
 /**
  * 请求工厂类
  *
@@ -136,7 +138,42 @@ class RequestFactory
         ?int $offset = null,
         ?string $hashes = null
     ): GetTorrentsRequest {
-        return GetTorrentsRequest::create($filter, $category, $tag, $sort, $reverse, $limit, $offset, $hashes);
+        $builder = GetTorrentsRequest::builder();
+        
+        if ($filter !== null) {
+            $builder->filter(TorrentFilter::fromString($filter));
+        }
+        
+        if ($category !== null) {
+            $builder->category($category);
+        }
+        
+        if ($tag !== null) {
+            $builder->tag($tag);
+        }
+        
+        if ($sort !== null) {
+            $builder->sortBy($sort);
+        }
+        
+        if ($reverse !== null) {
+            $builder->setReverse($reverse);
+        }
+        
+        if ($limit !== null) {
+            $builder->limit($limit);
+        }
+        
+        if ($offset !== null) {
+            $builder->offset($offset);
+        }
+        
+        if ($hashes !== null) {
+            $hashArray = explode('|', $hashes);
+            $builder->hashes($hashArray);
+        }
+        
+        return $builder->build();
     }
 
     public static function createGetTorrentInfoRequest(string $hash): GetTorrentInfoRequest

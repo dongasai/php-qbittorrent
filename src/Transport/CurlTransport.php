@@ -15,6 +15,36 @@ use Psr\Http\Message\RequestFactoryInterface;
 use Nyholm\Psr7\Factory\Psr17Factory;
 
 /**
+ * 简单的传输响应实现
+ */
+class SimpleTransportResponse implements TransportResponse
+{
+    public function __construct(private array $data) {}
+    public function getStatusCode(): int { return $this->data['status_code'] ?? 200; }
+    public function getHeaders(): array { return $this->data['headers'] ?? []; }
+    public function getBody(): string { return $this->data['body'] ?? ''; }
+    public function getData(): mixed { return $this->data['data'] ?? null; }
+    public function getJson(): ?array {
+        $body = $this->getBody();
+        if (empty($body)) return null;
+        $decoded = json_decode($body, true);
+        return json_last_error() === JSON_ERROR_NONE ? $decoded : null;
+    }
+    public function isSuccess(int ...$acceptableCodes): bool {
+        $codes = empty($acceptableCodes) ? [200, 201, 202, 204] : $acceptableCodes;
+        return in_array($this->getStatusCode(), $codes, true);
+    }
+    public function isJson(): bool {
+        $body = $this->getBody();
+        return !empty($body) && json_decode($body) !== null && json_last_error() === JSON_ERROR_NONE;
+    }
+    public function getHeader(string $name): ?string {
+        $headers = $this->getHeaders();
+        return $headers[$name] ?? $headers[strtolower($name)] ?? null;
+    }
+}
+
+/**
  * cURL HTTP传输实现
  *
  * 基于cURL的PSR-18 HTTP客户端实现
@@ -396,9 +426,6 @@ final class CurlTransport implements TransportInterface
      */
     private function handleCookies(string $setCookieHeader): void
     {
-        // 临时调试 - 记录调用
-        error_log("handleCookies called with: " . $setCookieHeader);
-
         if (empty($setCookieHeader)) {
             return;
         }
@@ -422,7 +449,6 @@ final class CurlTransport implements TransportInterface
                 // 如果是SID cookie，保存到认证信息中
                 if (trim($name) === 'SID') {
                     $this->cookie = trim($cookiePart);
-                    error_log("Found and set SID cookie: " . $this->cookie);
                     // 只保存 SID=value 部分，不包括其他属性
                     break;
                 }
@@ -564,13 +590,12 @@ final class CurlTransport implements TransportInterface
         ];
         $responseData = $this->request('GET', $url, $options);
 
-        return new class($responseData) implements TransportResponse {
-            public function __construct(private array $data) {}
-            public function getStatusCode(): int { return $this->data['status_code'] ?? 200; }
-            public function getHeaders(): array { return $this->data['headers'] ?? []; }
-            public function getBody(): string { return $this->data['body'] ?? ''; }
-            public function getData(): mixed { return $this->data['data'] ?? null; }
-        };
+        return new SimpleTransportResponse([
+            'status_code' => 200,
+            'headers' => [],
+            'body' => is_array($responseData) ? (json_encode($responseData) ?: '') : $responseData,
+            'data' => $responseData
+        ]);
     }
 
     /**
@@ -590,13 +615,12 @@ final class CurlTransport implements TransportInterface
         ];
         $responseData = $this->request('POST', $url, $options);
 
-        return new class($responseData) implements TransportResponse {
-            public function __construct(private array $data) {}
-            public function getStatusCode(): int { return $this->data['status_code'] ?? 200; }
-            public function getHeaders(): array { return $this->data['headers'] ?? []; }
-            public function getBody(): string { return $this->data['body'] ?? ''; }
-            public function getData(): mixed { return $this->data['data'] ?? null; }
-        };
+        return new SimpleTransportResponse([
+            'status_code' => 200,
+            'headers' => [],
+            'body' => is_array($responseData) ? (json_encode($responseData) ?: '') : $responseData,
+            'data' => $responseData
+        ]);
     }
 
     /**
@@ -616,13 +640,12 @@ final class CurlTransport implements TransportInterface
         ];
         $responseData = $this->request('PUT', $url, $options);
 
-        return new class($responseData) implements TransportResponse {
-            public function __construct(private array $data) {}
-            public function getStatusCode(): int { return $this->data['status_code'] ?? 200; }
-            public function getHeaders(): array { return $this->data['headers'] ?? []; }
-            public function getBody(): string { return $this->data['body'] ?? ''; }
-            public function getData(): mixed { return $this->data['data'] ?? null; }
-        };
+        return new SimpleTransportResponse([
+            'status_code' => 200,
+            'headers' => [],
+            'body' => is_array($responseData) ? (json_encode($responseData) ?: '') : $responseData,
+            'data' => $responseData
+        ]);
     }
 
     /**
@@ -642,12 +665,11 @@ final class CurlTransport implements TransportInterface
         ];
         $responseData = $this->request('DELETE', $url, $options);
 
-        return new class($responseData) implements TransportResponse {
-            public function __construct(private array $data) {}
-            public function getStatusCode(): int { return $this->data['status_code'] ?? 200; }
-            public function getHeaders(): array { return $this->data['headers'] ?? []; }
-            public function getBody(): string { return $this->data['body'] ?? ''; }
-            public function getData(): mixed { return $this->data['data'] ?? null; }
-        };
+        return new SimpleTransportResponse([
+            'status_code' => 200,
+            'headers' => [],
+            'body' => is_array($responseData) ? (json_encode($responseData) ?: '') : $responseData,
+            'data' => $responseData
+        ]);
     }
 }
