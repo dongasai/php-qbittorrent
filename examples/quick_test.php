@@ -8,7 +8,7 @@ use PhpQbittorrent\Client;
  * PHP qBittorrent Library - 快速测试脚本
  *
  * 预计运行需要3分钟,cli运行超时时间5分钟
- * 
+ * php examples/quick_test.php
  * ## 🔒 安全声明
  *
  * **重要说明**：本测试脚本采用多重安全机制，确保不会影响用户现有的 torrents：
