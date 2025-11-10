@@ -3,970 +3,613 @@ declare(strict_types=1);
 
 namespace PhpQbittorrent\API;
 
-use PhpQbittorrent\Transport\TransportInterface;
-use PhpQbittorrent\Exception\ClientException;
+use PhpQbittorrent\Contract\ApiInterface;
+use PhpQbittorrent\Contract\TransportInterface;
+use PhpQbittorrent\Request\Torrent\GetTorrentsRequest;
+use PhpQbittorrent\Request\Torrent\AddTorrentRequest;
+use PhpQbittorrent\Request\Torrent\DeleteTorrentsRequest;
+use PhpQbittorrent\Request\Torrent\PauseTorrentsRequest;
+use PhpQbittorrent\Request\Torrent\ResumeTorrentsRequest;
+use PhpQbittorrent\Response\Torrent\TorrentListResponse;
+use PhpQbittorrent\Exception\NetworkException;
+use PhpQbittorrent\Exception\ApiRuntimeException;
+use PhpQbittorrent\Exception\ValidationException;
 
 /**
- * Torrent API类
+ * Torrent API 参数对象化
  *
- * 处理qBittorrent Torrent相关的API操作，包括添加、删除、管理 torrents等
+ * 提供Torrent管理相关的API功能
  */
-final class TorrentAPI
+class TorrentAPI implements ApiInterface
 {
+    /** @var TransportInterface 传输层实例 */
     private TransportInterface $transport;
 
+    /**
+     * 构造函数
+     *
+     * @param TransportInterface $transport 传输层实例
+     */
     public function __construct(TransportInterface $transport)
     {
         $this->transport = $transport;
     }
 
     /**
-     * 获取所有torrent列表
+     * 获取API的基础路径
      *
-     * @param string|null $filter 过滤器 (all, downloading, seeding, completed, paused, active, inactive, resumed, paused, stalled)
-     * @param string|null $category 分类过滤
-     * @param string|null $sort 排序字段 (name, size, progress, dl_speed, up_speed, priority, num_seeds, num_leechs, etc.)
-     * @param bool $reverse 是否反向排序
-     * @param int|null $limit 限制返回数量
-     * @param int|null $offset 偏移量
-     * @param string|null $tagHashes Torrent hash列表，用|分隔
-     * @return array Torrent列表
-     * @throws ClientException 获取失败
+     * @return string API基础路径
      */
-    public function getTorrents(
-        ?string $filter = null,
-        ?string $category = null,
-        ?string $sort = null,
-        bool $reverse = false,
-        ?int $limit = null,
-        ?int $offset = null,
-        ?string $tagHashes = null
-    ): array {
-        $params = [];
-
-        if ($filter !== null) {
-            $params['filter'] = $filter;
-        }
-
-        if ($category !== null) {
-            $params['category'] = $category;
-        }
-
-        if ($sort !== null) {
-            $params['sort'] = $sort;
-        }
-
-        if ($reverse) {
-            $params['reverse'] = 'true';
-        }
-
-        if ($limit !== null) {
-            $params['limit'] = (string) $limit;
-        }
-
-        if ($offset !== null) {
-            $params['offset'] = (string) $offset;
-        }
-
-        if ($tagHashes !== null) {
-            $params['hashes'] = $tagHashes;
-        }
-
-        return $this->transport->request('GET', '/api/v2/torrents/info', [
-            'query' => $params
-        ]);
+    public function getBasePath(): string
+    {
+        return '/api/v2/torrents';
     }
 
     /**
-     * 获取特定torrent的详细信息
+     * 获取传输层实例
      *
-     * @param string $hash Torrent hash
-     * @return array Torrent详细信息
-     * @throws ClientException 获取失败
+     * @return TransportInterface 传输层实例
      */
-    public function getTorrentInfo(string $hash): array
+    public function getTransport(): TransportInterface
     {
-        $response = $this->transport->request('GET', '/api/v2/torrents/info', [
-            'query' => ['hashes' => $hash]
-        ]);
-
-        return $response[0] ?? [];
+        return $this->transport;
     }
 
     /**
-     * 获取torrent的属性
+     * 设置传输层实例
      *
-     * @param string $hash Torrent hash
-     * @return array Torrent属性
-     * @throws ClientException 获取失败
+     * @param TransportInterface $transport 传输层实例
+     * @return static 返回自身以支持链式调用
      */
-    public function getTorrentProperties(string $hash): array
+    public function setTransport(TransportInterface $transport): static
     {
-        return $this->transport->request('GET', '/api/v2/torrents/properties', [
-            'query' => ['hash' => $hash]
-        ]);
+        $this->transport = $transport;
+        return $this;
     }
 
     /**
-     * 获取torrent的文件列表
+     * 执行GET请求
      *
-     * @param string $hash Torrent hash
-     * @return array 文件列表
-     * @throws ClientException 获取失败
+     * @param string $endpoint API端点
+     * @param array<string, mixed> $parameters 请求参数
+     * @param array<string, string> $headers 请求头
+     * @return \PhpQbittorrent\Contract\ResponseInterface 响应对象
      */
-    public function getTorrentFiles(string $hash): array
+    public function get(string $endpoint, array $parameters = [], array $headers = []): \PhpQbittorrent\Contract\ResponseInterface
     {
-        return $this->transport->request('GET', '/api/v2/torrents/files', [
-            'query' => ['hash' => $hash]
-        ]);
+        $url = $this->getBasePath() . $endpoint;
+        $transportResponse = $this->transport->get($url, $parameters, $headers);
+        return $this->createGenericResponse($transportResponse);
     }
 
     /**
-     * 获取torrent的tracker列表
+     * 执行POST请求
      *
-     * @param string $hash Torrent hash
-     * @return array Tracker列表
-     * @throws ClientException 获取失败
+     * @param string $endpoint API端点
+     * @param array<string, mixed> $data 请求数据
+     * @param array<string, string> $headers 请求头
+     * @return \PhpQbittorrent\Contract\ResponseInterface 响应对象
      */
-    public function getTorrentTrackers(string $hash): array
+    public function post(string $endpoint, array $data = [], array $headers = []): \PhpQbittorrent\Contract\ResponseInterface
     {
-        return $this->transport->request('GET', '/api/v2/torrents/trackers', [
-            'query' => ['hash' => $hash]
-        ]);
+        $url = $this->getBasePath() . $endpoint;
+        $transportResponse = $this->transport->post($url, $data, $headers);
+        return $this->createGenericResponse($transportResponse);
     }
 
     /**
-     * 获取torrent的Web种子列表
+     * 获取Torrent列表
      *
-     * @param string $hash Torrent hash
-     * @return array Web种子列表
-     * @throws ClientException 获取失败
+     * @param GetTorrentsRequest $request 获取Torrent列表请求
+     * @return TorrentListResponse Torrent列表响应
+     * @throws NetworkException 网络异常
+     * @throws ValidationException 验证异常
+     * @throws ApiRuntimeException API运行时异常
      */
-    public function getTorrentWebSeeds(string $hash): array
+    public function getTorrents(GetTorrentsRequest $request): TorrentListResponse
     {
-        return $this->transport->request('GET', '/api/v2/torrents/webseeds', [
-            'query' => ['hash' => $hash]
-        ]);
-    }
-
-    /**
-     * 获取torrent的片段优先级
-     *
-     * @param string $hash Torrent hash
-     * @return array 片段优先级
-     * @throws ClientException 获取失败
-     */
-    public function getTorrentPiecePriorities(string $hash): array
-    {
-        return $this->transport->request('GET', '/api/v2/torrents/pieceStates', [
-            'query' => ['hash' => $hash]
-        ]);
-    }
-
-    /**
-     * 获取torrent的片段状态
-     *
-     * @param string $hash Torrent hash
-     * @return array 片段状态
-     * @throws ClientException 获取失败
-     */
-    public function getTorrentPieceStates(string $hash): array
-    {
-        return $this->transport->request('GET', '/api/v2/torrents/pieceStates', [
-            'query' => ['hash' => $hash]
-        ]);
-    }
-
-    /**
-     * 添加torrent（通过URL或磁力链接）
-     *
-     * @param array $urls URL列表
-     * @param array $options 选项
-     * @return bool 添加是否成功
-     * @throws ClientException 添加失败
-     */
-    public function addTorrents(array $urls, array $options = []): bool
-    {
-        $params = [
-            'urls' => implode("\n", $urls)
-        ];
-
-        // 添加可选参数
-        if (isset($options['save_path'])) {
-            $params['savepath'] = $options['save_path'];
-        }
-
-        if (isset($options['cookie'])) {
-            $params['cookie'] = $options['cookie'];
-        }
-
-        if (isset($options['category'])) {
-            $params['category'] = $options['category'];
-        }
-
-        if (isset($options['tags'])) {
-            $params['tags'] = $options['tags'];
-        }
-
-        if (isset($options['skip_checking']) && $options['skip_checking']) {
-            $params['skip_checking'] = 'true';
-        }
-
-        if (isset($options['paused']) && $options['paused']) {
-            $params['paused'] = 'true';
-        }
-
-        if (isset($options['root_folder']) && $options['root_folder']) {
-            $params['root_folder'] = 'true';
-        }
-
-        if (isset($options['ratio_limit'])) {
-            $params['ratioLimit'] = (string) $options['ratio_limit'];
-        }
-
-        if (isset($options['seeding_time_limit'])) {
-            $params['seedingTimeLimit'] = (string) $options['seeding_time_limit'];
-        }
-
-        if (isset($options['dl_limit'])) {
-            $params['dlLimit'] = (string) $options['dl_limit'];
-        }
-
-        if (isset($options['up_limit'])) {
-            $params['upLimit'] = (string) $options['up_limit'];
-        }
-
-        $this->transport->request('POST', '/api/v2/torrents/add', [
-            'form_params' => $params
-        ]);
-
-        return true;
-    }
-
-    /**
-     * 添加torrent（通过文件）
-     *
-     * @param array $files 文件数组，每个元素可以是文件路径或文件内容
-     * @param array $options 选项
-     * @return bool 添加是否成功
-     * @throws ClientException 添加失败
-     */
-    public function addTorrentFiles(array $files, array $options = []): bool
-    {
-        $multipart = [];
-
-        foreach ($files as $index => $file) {
-            if (is_string($file) && file_exists($file)) {
-                // 文件路径
-                $multipart[] = [
-                    'name' => 'torrents',
-                    'filename' => basename($file),
-                    'contents' => file_get_contents($file),
-                    'content_type' => 'application/x-bittorrent'
-                ];
-            } else {
-                // 文件内容
-                $filename = "torrent_{$index}.torrent";
-                $content = is_string($file) ? $file : serialize($file);
-
-                $multipart[] = [
-                    'name' => 'torrents',
-                    'filename' => $filename,
-                    'contents' => $content,
-                    'content_type' => 'application/x-bittorrent'
-                ];
-            }
-        }
-
-        // 添加其他选项
-        $optionMap = [
-            'save_path' => 'savepath',
-            'cookie' => 'cookie',
-            'category' => 'category',
-            'tags' => 'tags',
-            'skip_checking' => 'skip_checking',
-            'paused' => 'paused',
-            'root_folder' => 'root_folder',
-            'ratio_limit' => 'ratioLimit',
-            'seeding_time_limit' => 'seedingTimeLimit',
-            'dl_limit' => 'dlLimit',
-            'up_limit' => 'upLimit'
-        ];
-
-        foreach ($optionMap as $optionKey => $formKey) {
-            if (isset($options[$optionKey])) {
-                $value = $options[$optionKey];
-                if (is_bool($value)) {
-                    $value = $value ? 'true' : 'false';
-                } elseif (!is_string($value)) {
-                    $value = (string) $value;
-                }
-
-                $multipart[] = [
-                    'name' => $formKey,
-                    'contents' => $value
-                ];
-            }
-        }
-
-        $this->transport->request('POST', '/api/v2/torrents/add', [
-            'multipart' => $multipart
-        ]);
-
-        return true;
-    }
-
-    /**
-     * 跟踪torrent（通过磁力链接）
-     *
-     * @param array $magnetLinks 磁力链接列表
-     * @param array $options 选项
-     * @return bool 跟踪是否成功
-     * @throws ClientException 跟踪失败
-     */
-    public function trackTorrents(array $magnetLinks, array $options = []): bool
-    {
-        return $this->addTorrents($magnetLinks, $options);
-    }
-
-    /**
-     * 删除torrents
-     *
-     * @param string|array $hashes Torrent hash列表或'all'
-     * @param bool $deleteFiles 是否同时删除文件
-     * @return bool 删除是否成功
-     * @throws ClientException 删除失败
-     */
-    public function deleteTorrents($hashes, bool $deleteFiles = false): bool
-    {
-        if (is_array($hashes)) {
-            $hashes = implode('|', $hashes);
-        }
-
-        $params = [
-            'hashes' => $hashes,
-            'deleteFiles' => $deleteFiles ? 'true' : 'false'
-        ];
-
-        $this->transport->request('POST', '/api/v2/torrents/delete', [
-            'form_params' => $params
-        ]);
-
-        return true;
-    }
-
-    /**
-     * 暂停torrents
-     *
-     * @param string|array $hashes Torrent hash列表或'all'
-     * @return bool 暂停是否成功
-     * @throws ClientException 暂停失败
-     */
-    public function pauseTorrents($hashes): bool
-    {
-        if (is_array($hashes)) {
-            $hashes = implode('|', $hashes);
-        }
-
-        $this->transport->request('POST', '/api/v2/torrents/stop', [
-            'form_params' => ['hashes' => $hashes]
-        ]);
-
-        return true;
-    }
-
-    /**
-     * 恢复torrents
-     *
-     * @param string|array $hashes Torrent hash列表或'all'
-     * @return bool 恢复是否成功
-     * @throws ClientException 恢复失败
-     */
-    public function resumeTorrents($hashes): bool
-    {
-        if (is_array($hashes)) {
-            $hashes = implode('|', $hashes);
-        }
-
-        $this->transport->request('POST', '/api/v2/torrents/start', [
-            'form_params' => ['hashes' => $hashes]
-        ]);
-
-        return true;
-    }
-
-    /**
-     * 强制重新检查torrents
-     *
-     * @param string|array $hashes Torrent hash列表或'all'
-     * @return bool 重新检查是否成功
-     * @throws ClientException 重新检查失败
-     */
-    public function recheckTorrents($hashes): bool
-    {
-        if (is_array($hashes)) {
-            $hashes = implode('|', $hashes);
-        }
-
-        $this->transport->request('POST', '/api/v2/torrents/recheck', [
-            'form_params' => ['hashes' => $hashes]
-        ]);
-
-        return true;
-    }
-
-    /**
-     * 重新公告torrents到tracker
-     *
-     * @param string|array $hashes Torrent hash列表或'all'
-     * @return bool 重新公告是否成功
-     * @throws ClientException 重新公告失败
-     */
-    public function reannounceTorrents($hashes): bool
-    {
-        if (is_array($hashes)) {
-            $hashes = implode('|', $hashes);
-        }
-
-        $this->transport->request('POST', '/api/v2/torrents/reannounce', [
-            'form_params' => ['hashes' => $hashes]
-        ]);
-
-        return true;
-    }
-
-    /**
-     * 设置torrent位置（上移/下移）
-     *
-     * @param string $hash Torrent hash
-     * @param string $direction 方向: 'top', 'bottom', 'up', 'down'
-     * @return bool 设置是否成功
-     * @throws ClientException 设置失败
-     */
-    public function setTorrentPosition(string $hash, string $direction): bool
-    {
-        $validDirections = ['top', 'bottom', 'up', 'down'];
-        if (!in_array($direction, $validDirections, true)) {
-            throw new ClientException(
-                "无效的方向: {$direction}，必须是: " . implode(', ', $validDirections)
+        // 验证请求
+        $validation = $request->validate();
+        if (!$validation->isValid()) {
+            throw ValidationException::fromValidationResult(
+                $validation,
+                'GetTorrents request validation failed'
             );
         }
 
-        $this->transport->request('POST', "/api/v2/torrents/{$direction}Prio", [
-            'form_params' => ['hashes' => $hash]
-        ]);
+        try {
+            // 发送请求
+            $url = $this->getBasePath() . $request->getEndpoint();
+            $transportResponse = $this->transport->get(
+                $url,
+                $request->toArray(),
+                $request->getHeaders()
+            );
 
-        return true;
-    }
+            // 处理响应
+            return $this->handleTorrentListResponse($transportResponse, $request);
 
-    /**
-     * 设置文件优先级
-     *
-     * @param string $hash Torrent hash
-     * @param array $fileIds 文件ID列表
-     * @param int $priority 优先级 (0: 不下载, 1: 正常, 6: 高, 7: 最高)
-     * @return bool 设置是否成功
-     * @throws ClientException 设置失败
-     */
-    public function setFilePriority(string $hash, array $fileIds, int $priority): bool
-    {
-        $params = [
-            'hash' => $hash,
-            'id' => implode('|', array_map('strval', $fileIds)),
-            'priority' => (string) $priority
-        ];
-
-        $this->transport->request('POST', '/api/v2/torrents/filePrio', [
-            'form_params' => $params
-        ]);
-
-        return true;
-    }
-
-    /**
-     * 设置torrent下载限制
-     *
-     * @param string $hash Torrent hash
-     * @param int $limit 下载速度限制（字节/秒）
-     * @return bool 设置是否成功
-     * @throws ClientException 设置失败
-     */
-    public function setTorrentDownloadLimit(string $hash, int $limit): bool
-    {
-        $this->transport->request('POST', '/api/v2/torrents/setDownloadLimit', [
-            'form_params' => [
-                'hashes' => $hash,
-                'limit' => (string) $limit
-            ]
-        ]);
-
-        return true;
-    }
-
-    /**
-     * 设置torrent上传限制
-     *
-     * @param string $hash Torrent hash
-     * @param int $limit 上传速度限制（字节/秒）
-     * @return bool 设置是否成功
-     * @throws ClientException 设置失败
-     */
-    public function setTorrentUploadLimit(string $hash, int $limit): bool
-    {
-        $this->transport->request('POST', '/api/v2/torrents/setUploadLimit', [
-            'form_params' => [
-                'hashes' => $hash,
-                'limit' => (string) $limit
-            ]
-        ]);
-
-        return true;
-    }
-
-    /**
-     * 设置torrent分享比例限制
-     *
-     * @param string $hash Torrent hash
-     * @param float $ratio 分享比例
-     * @return bool 设置是否成功
-     * @throws ClientException 设置失败
-     */
-    public function setTorrentShareLimit(string $hash, float $ratio): bool
-    {
-        $this->transport->request('POST', '/api/v2/torrents/setShareLimits', [
-            'form_params' => [
-                'hashes' => $hash,
-                'ratioLimit' => (string) $ratio
-            ]
-        ]);
-
-        return true;
-    }
-
-    /**
-     * 添加tracker到torrent
-     *
-     * @param string $hash Torrent hash
-     * @param array $trackers Tracker URL列表
-     * @return bool 添加是否成功
-     * @throws ClientException 添加失败
-     */
-    public function addTrackers(string $hash, array $trackers): bool
-    {
-        $params = [
-            'hash' => $hash,
-            'urls' => implode("\n", $trackers)
-        ];
-
-        $this->transport->request('POST', '/api/v2/torrents/addTrackers', [
-            'form_params' => $params
-        ]);
-
-        return true;
-    }
-
-    /**
-     * 编辑tracker
-     *
-     * @param string $hash Torrent hash
-     * @param string $originalUrl 原始tracker URL
-     * @param string $newUrl 新tracker URL
-     * @return bool 编辑是否成功
-     * @throws ClientException 编辑失败
-     */
-    public function editTracker(string $hash, string $originalUrl, string $newUrl): bool
-    {
-        $params = [
-            'hash' => $hash,
-            'origUrl' => $originalUrl,
-            'newUrl' => $newUrl
-        ];
-
-        $this->transport->request('POST', '/api/v2/torrents/editTracker', [
-            'form_params' => $params
-        ]);
-
-        return true;
-    }
-
-    /**
-     * 移除trackers
-     *
-     * @param string $hash Torrent hash
-     * @param array $urls 要移除的tracker URL列表
-     * @return bool 移除是否成功
-     * @throws ClientException 移除失败
-     */
-    public function removeTrackers(string $hash, array $urls): bool
-    {
-        $params = [
-            'hash' => $hash,
-            'urls' => implode("\n", $urls)
-        ];
-
-        $this->transport->request('POST', '/api/v2/torrents/removeTrackers', [
-            'form_params' => $params
-        ]);
-
-        return true;
-    }
-
-    /**
-     * 设置torrent分类
-     *
-     * @param string|array $hashes Torrent hash列表或'all'
-     * @param string $category 分类名称
-     * @return bool 设置是否成功
-     * @throws ClientException 设置失败
-     */
-    public function setTorrentCategory($hashes, string $category): bool
-    {
-        if (is_array($hashes)) {
-            $hashes = implode('|', $hashes);
+        } catch (NetworkException $e) {
+            throw new ApiRuntimeException(
+                'Get torrents failed due to network error: ' . $e->getMessage(),
+                'GET_TORRENTS_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url,
+                'GET',
+                $transportResponse->getStatusCode() ?? null,
+                ['request_summary' => $request->getSummary()],
+                $e
+            );
         }
-
-        $this->transport->request('POST', '/api/v2/torrents/setCategory', [
-            'form_params' => [
-                'hashes' => $hashes,
-                'category' => $category
-            ]
-        ]);
-
-        return true;
     }
 
     /**
-     * 设置torrent标签
+     * 获取Torrent列表（别名方法）
      *
-     * @param string|array $hashes Torrent hash列表或'all'
-     * @param array $tags 标签列表
-     * @return bool 设置是否成功
-     * @throws ClientException 设置失败
+     * @return TorrentListResponse Torrent列表响应
+     * @throws NetworkException 网络异常
+     * @throws ValidationException 验证异常
+     * @throws ApiRuntimeException API运行时异常
      */
-    public function setTorrentTags($hashes, array $tags): bool
+    public function getTorrentList(): TorrentListResponse
     {
-        if (is_array($hashes)) {
-            $hashes = implode('|', $hashes);
-        }
-
-        $this->transport->request('POST', '/api/v2/torrents/setTags', [
-            'form_params' => [
-                'hashes' => $hashes,
-                'tags' => implode(', ', $tags)
-            ]
-        ]);
-
-        return true;
+        return $this->getTorrents(\PhpQbittorrent\Request\Torrent\GetTorrentsRequest::create());
     }
 
     /**
-     * 添加torrent标签
+     * 获取Torrent统计信息（别名方法）
      *
-     * @param string|array $hashes Torrent hash列表或'all'
-     * @param array $tags 要添加的标签列表
-     * @return bool 添加是否成功
-     * @throws ClientException 添加失败
+     * @return array<string, int> Torrent统计信息
+     * @throws NetworkException 网络异常
+     * @throws ValidationException 验证异常
+     * @throws ApiRuntimeException API运行时异常
      */
-    public function addTorrentTags($hashes, array $tags): bool
-    {
-        if (is_array($hashes)) {
-            $hashes = implode('|', $hashes);
-        }
-
-        $this->transport->request('POST', '/api/v2/torrents/addTags', [
-            'form_params' => [
-                'hashes' => $hashes,
-                'tags' => implode(', ', $tags)
-            ]
-        ]);
-
-        return true;
-    }
-
-    /**
-     * 移除torrent标签
-     *
-     * @param string|array $hashes Torrent hash列表或'all'
-     * @param array $tags 要移除的标签列表
-     * @return bool 移除是否成功
-     * @throws ClientException 移除失败
-     */
-    public function removeTorrentTags($hashes, array $tags): bool
-    {
-        if (is_array($hashes)) {
-            $hashes = implode('|', $hashes);
-        }
-
-        $this->transport->request('POST', '/api/v2/torrents/removeTags', [
-            'form_params' => [
-                'hashes' => $hashes,
-                'tags' => implode(', ', $tags)
-            ]
-        ]);
-
-        return true;
-    }
-
-    /**
-     * 获取所有分类
-     *
-     * @return array 分类列表
-     * @throws ClientException 获取失败
-     */
-    public function getCategories(): array
-    {
-        return $this->transport->request('GET', '/api/v2/torrents/categories');
-    }
-
-    /**
-     * 创建分类
-     *
-     * @param string $name 分类名称
-     * @param string $savePath 保存路径
-     * @return bool 创建是否成功
-     * @throws ClientException 创建失败
-     */
-    public function createCategory(string $name, string $savePath = ''): bool
-    {
-        $params = [
-            'category' => $name,
-            'savePath' => $savePath
-        ];
-
-        $this->transport->request('POST', '/api/v2/torrents/createCategory', [
-            'form_params' => $params
-        ]);
-
-        return true;
-    }
-
-    /**
-     * 编辑分类
-     *
-     * @param string $name 分类名称
-     * @param string $savePath 保存路径
-     * @return bool 编辑是否成功
-     * @throws ClientException 编辑失败
-     */
-    public function editCategory(string $name, string $savePath = ''): bool
-    {
-        $params = [
-            'category' => $name,
-            'savePath' => $savePath
-        ];
-
-        $this->transport->request('POST', '/api/v2/torrents/editCategory', [
-            'form_params' => $params
-        ]);
-
-        return true;
-    }
-
-    /**
-     * 删除分类
-     *
-     * @param string|array $categories 分类名称列表
-     * @return bool 删除是否成功
-     * @throws ClientException 删除失败
-     */
-    public function removeCategories($categories): bool
-    {
-        if (is_array($categories)) {
-            $categories = implode("\n", $categories);
-        }
-
-        $this->transport->request('POST', '/api/v2/torrents/removeCategories', [
-            'form_params' => ['categories' => $categories]
-        ]);
-
-        return true;
-    }
-
-    /**
-     * 获取所有标签
-     *
-     * @return array 标签列表
-     * @throws ClientException 获取失败
-     */
-    public function getTags(): array
-    {
-        return $this->transport->request('GET', '/api/v2/torrents/tags');
-    }
-
-    /**
-     * 创建标签
-     *
-     * @param array $tags 标签列表
-     * @return bool 创建是否成功
-     * @throws ClientException 创建失败
-     */
-    public function createTags(array $tags): bool
-    {
-        $this->transport->request('POST', '/api/v2/torrents/createTags', [
-            'form_params' => ['tags' => implode(', ', $tags)]
-        ]);
-
-        return true;
-    }
-
-    /**
-     * 删除标签
-     *
-     * @param array $tags 标签列表
-     * @return bool 删除是否成功
-     * @throws ClientException 删除失败
-     */
-    public function deleteTags(array $tags): bool
-    {
-        $this->transport->request('POST', '/api/v2/torrents/deleteTags', [
-            'form_params' => ['tags' => implode(', ', $tags)]
-        ]);
-
-        return true;
-    }
-
-    /**
-     * 获取torrent统计信息
-     *
-     * @param string|null $filter 过滤器
-     * @return array 统计信息
-     * @throws ClientException 获取失败
-     */
-    public function getTorrentStats(?string $filter = null): array
-    {
-        $params = [];
-        if ($filter !== null) {
-            $params['filter'] = $filter;
-        }
-
-        return $this->transport->request('GET', '/api/v2/torrents/stats', [
-            'query' => $params
-        ]);
-    }
-
-    /**
-     * 查找torrent
-     *
-     * @param string $pattern 搜索模式
-     * @param string|null $category 分类过滤
-     * @param string|null $plugin 插件过滤
-     * @return array 搜索结果
-     * @throws ClientException 搜索失败
-     */
-    public function searchTorrents(string $pattern, ?string $category = null, ?string $plugin = null): array
-    {
-        $params = ['pattern' => $pattern];
-
-        if ($category !== null) {
-            $params['category'] = $category;
-        }
-
-        if ($plugin !== null) {
-            $params['plugin'] = $plugin;
-        }
-
-        return $this->transport->request('POST', '/api/v2/search/start', [
-            'form_params' => $params
-        ]);
-    }
-
-    /**
-     * 获取下载位置
-     *
-     * @param string $hash Torrent hash
-     * @return array 下载位置信息
-     * @throws ClientException 获取失败
-     */
-    public function getDownloadLocation(string $hash): array
-    {
-        return $this->transport->request('GET', '/api/v2/torrents/downloadLocation', [
-            'query' => ['hash' => $hash]
-        ]);
-    }
-
-    /**
-     * 设置下载位置
-     *
-     * @param string|array $hashes Torrent hash列表或'all'
-     * @param string $location 下载位置
-     * @return bool 设置是否成功
-     * @throws ClientException 设置失败
-     */
-    public function setDownloadLocation($hashes, string $location): bool
-    {
-        if (is_array($hashes)) {
-            $hashes = implode('|', $hashes);
-        }
-
-        $this->transport->request('POST', '/api/v2/torrents/setLocation', [
-            'form_params' => [
-                'hashes' => $hashes,
-                'location' => $location
-            ]
-        ]);
-
-        return true;
-    }
-
-    /**
-     * 设置自动管理
-     *
-     * @param string|array $hashes Torrent hash列表或'all'
-     * @param bool $enabled 是否启用自动管理
-     * @return bool 设置是否成功
-     * @throws ClientException 设置失败
-     */
-    public function setAutoManagement($hashes, bool $enabled): bool
-    {
-        if (is_array($hashes)) {
-            $hashes = implode('|', $hashes);
-        }
-
-        $this->transport->request('POST', '/api/v2/torrents/setAutoManagement', [
-            'form_params' => [
-                'hashes' => $hashes,
-                'enabled' => $enabled ? 'true' : 'false'
-            ]
-        ]);
-
-        return true;
-    }
-
-    /**
-     * 获取torrent的完整状态摘要
-     *
-     * @param string $hash Torrent hash
-     * @return array 状态摘要
-     */
-    public function getTorrentSummary(string $hash): array
+    public function getTorrentStats(): array
     {
         try {
-            $info = $this->getTorrentInfo($hash);
-            $properties = $this->getTorrentProperties($hash);
-            $files = $this->getTorrentFiles($hash);
-            $trackers = $this->getTorrentTrackers($hash);
+            $torrentListResponse = $this->getTorrentList();
+            $torrents = $torrentListResponse->getTorrents();
 
-            return [
-                'basic_info' => $info,
-                'properties' => $properties,
-                'files' => [
-                    'count' => count($files),
-                    'total_size' => array_sum(array_column($files, 'size')),
-                    'files' => $files
-                ],
-                'trackers' => [
-                    'count' => count($trackers),
-                    'working' => array_filter($trackers, fn($t) => $t['status'] === 1),
-                    'trackers' => $trackers
-                ],
-                'progress_percentage' => round(($info['progress'] ?? 0) * 100, 2),
-                'estimated_completion' => $info['eta'] > 0 ? date('Y-m-d H:i:s', time() + $info['eta']) : 'Unknown'
+            $stats = [
+                'total' => count($torrents),
+                'downloading' => 0,
+                'seeding' => 0,
+                'completed' => 0,
+                'paused' => 0,
+                'error' => 0,
+                'inactive' => 0,
             ];
-        } catch (ClientException $e) {
+
+            foreach ($torrents as $torrent) {
+                $state = $torrent->getState() ?? '';
+                switch ($state) {
+                    case 'downloading':
+                    case 'metaDL':
+                    case 'forcedDL':
+                        $stats['downloading']++;
+                        break;
+                    case 'uploading':
+                    case 'forcedUP':
+                    case 'stalledUP':
+                        $stats['seeding']++;
+                        break;
+                    case 'pausedUP':
+                    case 'pausedDL':
+                        $stats['paused']++;
+                        break;
+                    case 'error':
+                    case 'missingFiles':
+                        $stats['error']++;
+                        break;
+                    case 'stalledDL':
+                        $stats['inactive']++;
+                        break;
+                    default:
+                        if ($torrent->getProgress() >= 1.0) {
+                            $stats['completed']++;
+                        } else {
+                            $stats['inactive']++;
+                        }
+                        break;
+                }
+            }
+
+            return $stats;
+        } catch (\Exception $e) {
+            // 如果获取失败，返回空的统计数组
             return [
-                'error' => $e->getMessage(),
-                'hash' => $hash
+                'total' => 0,
+                'downloading' => 0,
+                'seeding' => 0,
+                'completed' => 0,
+                'paused' => 0,
+                'error' => 0,
+                'inactive' => 0,
             ];
         }
+    }
+
+    /**
+     * 添加Torrent
+     *
+     * @param AddTorrentRequest $request 添加Torrent请求
+     * @return \PhpQbittorrent\Contract\ResponseInterface 添加响应
+     * @throws NetworkException 网络异常
+     * @throws ValidationException 验证异常
+     * @throws ApiRuntimeException API运行时异常
+     */
+    public function addTorrents(AddTorrentRequest $request): \PhpQbittorrent\Contract\ResponseInterface
+    {
+        // 验证请求
+        $validation = $request->validate();
+        if (!$validation->isValid()) {
+            throw ValidationException::fromValidationResult(
+                $validation,
+                'AddTorrents request validation failed'
+            );
+        }
+
+        try {
+            $url = $this->getBasePath() . $request->getEndpoint();
+            $requestData = $request->toArray();
+            $fileFields = $request->getFileFields();
+
+            // 如果有文件字段，使用multipart请求
+            if (!empty($fileFields)) {
+                $transportResponse = $this->transport->post(
+                    $url,
+                    $requestData,
+                    $request->getHeaders(),
+                    $fileFields
+                );
+            } else {
+                $transportResponse = $this->transport->post(
+                    $url,
+                    $requestData,
+                    $request->getHeaders()
+                );
+            }
+
+            // 处理响应
+            return $this->handleAddTorrentResponse($transportResponse, $request);
+
+        } catch (NetworkException $e) {
+            throw new ApiRuntimeException(
+                'Add torrents failed due to network error: ' . $e->getMessage(),
+                'ADD_TORRENTS_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url,
+                'POST',
+                $transportResponse->getStatusCode() ?? null,
+                ['request_summary' => $request->getSummary()],
+                $e
+            );
+        }
+    }
+
+    /**
+     * 删除Torrent
+     *
+     * @param DeleteTorrentsRequest $request 删除Torrent请求
+     * @return \PhpQbittorrent\Contract\ResponseInterface 删除响应
+     * @throws NetworkException 网络异常
+     * @throws ValidationException 验证异常
+     * @throws ApiRuntimeException API运行时异常
+     */
+    public function deleteTorrents(DeleteTorrentsRequest $request): \PhpQbittorrent\Contract\ResponseInterface
+    {
+        // 验证请求
+        $validation = $request->validate();
+        if (!$validation->isValid()) {
+            throw ValidationException::fromValidationResult(
+                $validation,
+                'DeleteTorrents request validation failed'
+            );
+        }
+
+        try {
+            $url = $this->getBasePath() . $request->getEndpoint();
+            $transportResponse = $this->transport->post(
+                $url,
+                $request->toArray(),
+                $request->getHeaders()
+            );
+
+            // 处理响应
+            return $this->handleDeleteTorrentResponse($transportResponse, $request);
+
+        } catch (NetworkException $e) {
+            throw new ApiRuntimeException(
+                'Delete torrents failed due to network error: ' . $e->getMessage(),
+                'DELETE_TORRENTS_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url,
+                'POST',
+                $transportResponse->getStatusCode() ?? null,
+                ['request_summary' => $request->getSummary()],
+                $e
+            );
+        }
+    }
+
+    /**
+     * 暂停Torrent
+     *
+     * @param PauseTorrentsRequest $request 暂停Torrent请求
+     * @return \PhpQbittorrent\Contract\ResponseInterface 暂停响应
+     * @throws NetworkException 网络异常
+     * @throws ValidationException 验证异常
+     * @throws ApiRuntimeException API运行时异常
+     */
+    public function pauseTorrents(PauseTorrentsRequest $request): \PhpQbittorrent\Contract\ResponseInterface
+    {
+        // 验证请求
+        $validation = $request->validate();
+        if (!$validation->isValid()) {
+            throw ValidationException::fromValidationResult(
+                $validation,
+                'PauseTorrents request validation failed'
+            );
+        }
+
+        try {
+            $url = $this->getBasePath() . $request->getEndpoint();
+            $transportResponse = $this->transport->post(
+                $url,
+                $request->toArray(),
+                $request->getHeaders()
+            );
+
+            // 处理响应
+            return $this->handlePauseTorrentResponse($transportResponse, $request);
+
+        } catch (NetworkException $e) {
+            throw new ApiRuntimeException(
+                'Pause torrents failed due to network error: ' . $e->getMessage(),
+                'PAUSE_TORRENTS_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url,
+                'POST',
+                $transportResponse->getStatusCode() ?? null,
+                ['request_summary' => $request->getSummary()],
+                $e
+            );
+        }
+    }
+
+    /**
+     * 恢复Torrent
+     *
+     * @param ResumeTorrentsRequest $request 恢复Torrent请求
+     * @return \PhpQbittorrent\Contract\ResponseInterface 恢复响应
+     * @throws NetworkException 网络异常
+     * @throws ValidationException 验证异常
+     * @throws ApiRuntimeException API运行时异常
+     */
+    public function resumeTorrents(ResumeTorrentsRequest $request): \PhpQbittorrent\Contract\ResponseInterface
+    {
+        // 验证请求
+        $validation = $request->validate();
+        if (!$validation->isValid()) {
+            throw ValidationException::fromValidationResult(
+                $validation,
+                'ResumeTorrents request validation failed'
+            );
+        }
+
+        try {
+            $url = $this->getBasePath() . $request->getEndpoint();
+            $transportResponse = $this->transport->post(
+                $url,
+                $request->toArray(),
+                $request->getHeaders()
+            );
+
+            // 处理响应
+            return $this->handleResumeTorrentResponse($transportResponse, $request);
+
+        } catch (NetworkException $e) {
+            throw new ApiRuntimeException(
+                'Resume torrents failed due to network error: ' . $e->getMessage(),
+                'RESUME_TORRENTS_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url,
+                'POST',
+                $transportResponse->getStatusCode() ?? null,
+                ['request_summary' => $request->getSummary()],
+                $e
+            );
+        }
+    }
+
+    /**
+     * 处理Torrent列表响应
+     *
+     * @param \PhpQbittorrent\Contract\TransportResponse $transportResponse 传输响应
+     * @param GetTorrentsRequest $request 请求对象
+     * @return TorrentListResponse Torrent列表响应
+     */
+    private function handleTorrentListResponse(
+        \PhpQbittorrent\Contract\TransportResponse $transportResponse,
+        GetTorrentsRequest $request
+    ): TorrentListResponse {
+        $statusCode = $transportResponse->getStatusCode();
+        $headers = $transportResponse->getHeaders();
+        $rawResponse = $transportResponse->getBody();
+
+        if ($statusCode === 200) {
+            try {
+                $torrentsData = $transportResponse->getJson() ?? [];
+                return TorrentListResponse::fromApiResponse(
+                    $torrentsData,
+                    $request->toArray()
+                );
+            } catch (\Exception $e) {
+                return TorrentListResponse::failure(
+                    ['响应解析失败: ' . $e->getMessage()],
+                    $headers,
+                    $statusCode,
+                    $rawResponse
+                );
+            }
+        } else {
+            return TorrentListResponse::failure(
+                ["获取Torrent列表失败，状态码: {$statusCode}"],
+                $headers,
+                $statusCode,
+                $rawResponse
+            );
+        }
+    }
+
+    /**
+     * 处理添加Torrent响应
+     *
+     * @param \PhpQbittorrent\Contract\TransportResponse $transportResponse 传输响应
+     * @param AddTorrentRequest $request 请求对象
+     * @return \PhpQbittorrent\Contract\ResponseInterface 添加响应
+     */
+    private function handleAddTorrentResponse(
+        \PhpQbittorrent\Contract\TransportResponse $transportResponse,
+        AddTorrentRequest $request
+    ): \PhpQbittorrent\Contract\ResponseInterface {
+        $statusCode = $transportResponse->getStatusCode();
+        $headers = $transportResponse->getHeaders();
+        $rawResponse = $transportResponse->getBody();
+
+        if ($statusCode === 200) {
+            return $this->createGenericResponse($transportResponse);
+        } elseif ($statusCode === 415) {
+            return $this->createGenericResponse(
+                $transportResponse,
+                ['error' => 'Torrent文件无效']
+            );
+        } else {
+            return $this->createGenericResponse(
+                $transportResponse,
+                ['error' => "添加Torrent失败，状态码: {$statusCode}"]
+            );
+        }
+    }
+
+    /**
+     * 处理删除Torrent响应
+     *
+     * @param \PhpQbittorrent\Contract\TransportResponse $transportResponse 传输响应
+     * @param DeleteTorrentsRequest $request 请求对象
+     * @return \PhpQbittorrent\Contract\ResponseInterface 删除响应
+     */
+    private function handleDeleteTorrentResponse(
+        \PhpQbittorrent\Contract\TransportResponse $transportResponse,
+        DeleteTorrentsRequest $request
+    ): \PhpQbittorrent\Contract\ResponseInterface {
+        $statusCode = $transportResponse->getStatusCode();
+
+        if ($statusCode === 200) {
+            return $this->createGenericResponse($transportResponse);
+        } else {
+            return $this->createGenericResponse(
+                $transportResponse,
+                ['error' => "删除Torrent失败，状态码: {$statusCode}"]
+            );
+        }
+    }
+
+    /**
+     * 处理暂停Torrent响应
+     *
+     * @param \PhpQbittorrent\Contract\TransportResponse $transportResponse 传输响应
+     * @param PauseTorrentsRequest $request 请求对象
+     * @return \PhpQbittorrent\Contract\ResponseInterface 暂停响应
+     */
+    private function handlePauseTorrentResponse(
+        \PhpQbittorrent\Contract\TransportResponse $transportResponse,
+        PauseTorrentsRequest $request
+    ): \PhpQbittorrent\Contract\ResponseInterface {
+        $statusCode = $transportResponse->getStatusCode();
+
+        if ($statusCode === 200) {
+            return $this->createGenericResponse($transportResponse);
+        } else {
+            return $this->createGenericResponse(
+                $transportResponse,
+                ['error' => "暂停Torrent失败，状态码: {$statusCode}"]
+            );
+        }
+    }
+
+    /**
+     * 处理恢复Torrent响应
+     *
+     * @param \PhpQbittorrent\Contract\TransportResponse $transportResponse 传输响应
+     * @param ResumeTorrentsRequest $request 请求对象
+     * @return \PhpQbittorrent\Contract\ResponseInterface 恢复响应
+     */
+    private function handleResumeTorrentResponse(
+        \PhpQbittorrent\Contract\TransportResponse $transportResponse,
+        ResumeTorrentsRequest $request
+    ): \PhpQbittorrent\Contract\ResponseInterface {
+        $statusCode = $transportResponse->getStatusCode();
+
+        if ($statusCode === 200) {
+            return $this->createGenericResponse($transportResponse);
+        } else {
+            return $this->createGenericResponse(
+                $transportResponse,
+                ['error' => "恢复Torrent失败，状态码: {$statusCode}"]
+            );
+        }
+    }
+
+    /**
+     * 创建通用响应对象
+     *
+     * @param \PhpQbittorrent\Contract\TransportResponse $transportResponse 传输响应
+     * @param array<string, mixed> $additionalData 额外数据
+     * @return \PhpQbittorrent\Contract\ResponseInterface 响应对象
+     */
+    private function createGenericResponse(
+        \PhpQbittorrent\Contract\TransportResponse $transportResponse,
+        array $additionalData = []
+    ): \PhpQbittorrent\Contract\ResponseInterface {
+        // 这里可以创建一个通用的响应对象
+        // 为了简化，我们创建一个简单的响应数组
+        return new class($transportResponse, $additionalData) implements \PhpQbittorrent\Contract\ResponseInterface {
+            private \PhpQbittorrent\Contract\TransportResponse $response;
+            private array $data;
+            private array $additionalData;
+
+            public function __construct(
+                \PhpQbittorrent\Contract\TransportResponse $response,
+                array $additionalData = []
+            ) {
+                $this->response = $response;
+                $this->data = $response->getJson() ?? [];
+                $this->additionalData = $additionalData;
+            }
+
+            public static function fromArray(array $data): static {
+                return new self(new class($data) implements \PhpQbittorrent\Contract\TransportResponse {
+                    private array $data;
+                    public function __construct(array $data) { $this->data = $data; }
+                    public function getStatusCode(): int { return $this->data['status_code'] ?? 200; }
+                    public function getHeaders(): array { return $this->data['headers'] ?? []; }
+                    public function getBody(): string { return $this->data['body'] ?? ''; }
+                    public function getJson(): ?array { return $this->data['json'] ?? null; }
+                    public function isSuccess(int ...$acceptableCodes): bool { return true; }
+                    public function isJson(): bool { return true; }
+                    public function getHeader(string $name): ?string { return null; }
+                }, $additionalData);
+            }
+
+            public function isSuccess(): bool { return $this->response->isSuccess(); }
+            public function getErrors(): array { return $this->additionalData['errors'] ?? []; }
+            public function getData(): mixed { return array_merge($this->data, $this->additionalData); }
+            public function getStatusCode(): int { return $this->response->getStatusCode(); }
+            public function getHeaders(): array { return $this->response->getHeaders(); }
+            public function getRawResponse(): string { return $this->response->getBody(); }
+            public function toArray(): array { return array_merge($this->data, $this->additionalData); }
+            public function jsonSerialize(): array { return $this->toArray(); }
+        };
     }
 }

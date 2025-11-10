@@ -1,12 +1,12 @@
 <?php
 declare(strict_types=1);
 
-namespace Dongasai\qBittorrent\Request\Auth;
+namespace PhpQbittorrent\Request\Auth;
 
-use Dongasai\qBittorrent\Request\AbstractRequest;
-use Dongasai\qBittorrent\Contract\ValidationResult;
-use Dongasai\qBittorrent\Validation\BasicValidationResult;
-use Dongasai\qBittorrent\Exception\ValidationException;
+use PhpQbittorrent\Request\AbstractRequest;
+use PhpQbittorrent\Contract\ValidationResult;
+use PhpQbittorrent\Validation\BasicValidationResult;
+use PhpQbittorrent\Exception\ValidationException;
 
 /**
  * 登录请求对象
@@ -310,7 +310,7 @@ class LoginRequestBuilder
      */
     public function validate(): ValidationResult
     {
-        $result = \Dongasai\qBittorrent\Validation\BasicValidationResult::success();
+        $result = \PhpQbittorrent\Validation\BasicValidationResult::success();
 
         if ($this->username === null) {
             $result->addError('用户名是必需的');

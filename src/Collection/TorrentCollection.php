@@ -1,12 +1,12 @@
 <?php
 declare(strict_types=1);
 
-namespace Dongasai\qBittorrent\Collection;
+namespace PhpQbittorrent\Collection;
 
-use Dongasai\qBittorrent\Collection\AbstractCollection;
-use Dongasai\qBittorrent\Model\TorrentInfoV2;
-use Dongasai\qBittorrent\Enum\TorrentState;
-use Dongasai\qBittorrent\Enum\TorrentFilter;
+use PhpQbittorrent\Collection\AbstractCollection;
+use PhpQbittorrent\Model\TorrentInfo;
+use PhpQbittorrent\Enum\TorrentState;
+use PhpQbittorrent\Enum\TorrentFilter;
 
 /**
  * Torrent集合类
@@ -18,10 +18,10 @@ class TorrentCollection extends AbstractCollection
     /**
      * 添加Torrent到集合
      *
-     * @param TorrentInfoV2 $torrent Torrent信息
+     * @param TorrentInfo $torrent Torrent信息
      * @return self 返回自身以支持链式调用
      */
-    public function addTorrent(TorrentInfoV2 $torrent): self
+    public function addTorrent(TorrentInfo $torrent): self
     {
         $this->items[] = $torrent;
         return $this;
@@ -30,7 +30,7 @@ class TorrentCollection extends AbstractCollection
     /**
      * 添加多个Torrent到集合
      *
-     * @param array<TorrentInfoV2> $torrents Torrent列表
+     * @param array<TorrentInfo> $torrents Torrent列表
      * @return self 返回自身以支持链式调用
      */
     public function addTorrents(array $torrents): self
@@ -45,9 +45,9 @@ class TorrentCollection extends AbstractCollection
      * 根据哈希查找Torrent
      *
      * @param string $hash 哈希值
-     * @return TorrentInfoV2|null Torrent信息，未找到返回null
+     * @return TorrentInfo|null Torrent信息，未找到返回null
      */
-    public function findByHash(string $hash): ?TorrentInfoV2
+    public function findByHash(string $hash): ?TorrentInfo
     {
         foreach ($this->items as $torrent) {
             if ($torrent->getHash() === $hash) {
@@ -569,11 +569,11 @@ class TorrentCollection extends AbstractCollection
     /**
      * 获取Torrent字段的值
      *
-     * @param TorrentInfoV2 $torrent Torrent对象
+     * @param TorrentInfo $torrent Torrent对象
      * @param string $field 字段名
      * @return mixed 字段值
      */
-    private function getFieldValue(TorrentInfoV2 $torrent, string $field): mixed
+    private function getFieldValue(TorrentInfo $torrent, string $field): mixed
     {
         return match($field) {
             'name' => $torrent->getName(),
@@ -618,7 +618,7 @@ class TorrentCollection extends AbstractCollection
     {
         $collection = new self();
         foreach ($data as $torrentData) {
-            $collection->addTorrent(TorrentInfoV2::fromArray($torrentData));
+            $collection->addTorrent(TorrentInfo::fromArray($torrentData));
         }
         return $collection;
     }

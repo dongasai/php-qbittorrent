@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Dongasai\qBittorrent\Enum;
+namespace PhpQbittorrent\Enum;
 
 /**
  * Torrent过滤条件枚举

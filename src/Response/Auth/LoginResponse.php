@@ -1,12 +1,12 @@
 <?php
 declare(strict_types=1);
 
-namespace Dongasai\qBittorrent\Response\Auth;
+namespace PhpQbittorrent\Response\Auth;
 
-use Dongasai\qBittorrent\Response\AbstractResponse;
-use Dongasai\qBittorrent\Contract\ValidationResult;
-use Dongasai\qBittorrent\Validation\BasicValidationResult;
-use Dongasai\qBittorrent\Exception\ValidationException;
+use PhpQbittorrent\Response\AbstractResponse;
+use PhpQbittorrent\Contract\ValidationResult;
+use PhpQbittorrent\Validation\BasicValidationResult;
+use PhpQbittorrent\Exception\ValidationException;
 
 /**
  * 登录响应对象
@@ -33,21 +33,23 @@ class LoginResponse extends AbstractResponse
     /**
      * 创建成功的登录响应
      *
-     * @param string $sessionId 会话ID
+     * @param array $data 数据数组（兼容父类）
      * @param array<string, string> $headers 响应头
      * @param int $statusCode HTTP状态码
      * @param string $rawResponse 原始响应内容
-     * @param array<string, mixed> $userInfo 用户信息
-     * @return self 登录响应实例
+     * @return static 登录响应实例
      */
     public static function success(
-        string $sessionId,
+        array $data = [],
         array $headers = [],
         int $statusCode = 200,
-        string $rawResponse = '',
-        array $userInfo = []
-    ): self {
-        $instance = parent::success([], $headers, $statusCode, $rawResponse);
+        string $rawResponse = ''
+    ): static {
+        $instance = parent::success($data, $headers, $statusCode, $rawResponse);
+
+        // 提取会话ID和用户信息
+        $sessionId = $data['session_id'] ?? '';
+        $userInfo = $data['user_info'] ?? [];
         $instance->sessionId = $sessionId;
         $instance->userInfo = $userInfo;
 
@@ -71,7 +73,7 @@ class LoginResponse extends AbstractResponse
         array $headers = [],
         int $statusCode = 403,
         string $rawResponse = ''
-    ): self {
+    ): static {
         $instance = parent::failure($errors, $headers, $statusCode, $rawResponse);
 
         // 根据状态码添加具体的错误信息

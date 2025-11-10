@@ -1,11 +1,11 @@
 <?php
 declare(strict_types=1);
 
-namespace Dongasai\qBittorrent\Request\Transfer;
+namespace PhpQbittorrent\Request\Transfer;
 
-use Dongasai\qBittorrent\Request\AbstractRequest;
-use Dongasai\qBittorrent\Contract\ValidationResult;
-use Dongasai\qBittorrent\Validation\BasicValidationResult;
+use PhpQbittorrent\Request\AbstractRequest;
+use PhpQbittorrent\Contract\ValidationResult;
+use PhpQbittorrent\Validation\BasicValidationResult;
 
 /**
  * 切换替代速度限制请求

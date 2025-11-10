@@ -1,12 +1,12 @@
 <?php
 declare(strict_types=1);
 
-namespace Dongasai\qBittorrent\Request\Torrent;
+namespace PhpQbittorrent\Request\Torrent;
 
-use Dongasai\qBittorrent\Request\AbstractRequest;
-use Dongasai\qBittorrent\Contract\ValidationResult;
-use Dongasai\qBittorrent\Validation\BasicValidationResult;
-use Dongasai\qBittorrent\Exception\ValidationException;
+use PhpQbittorrent\Request\AbstractRequest;
+use PhpQbittorrent\Contract\ValidationResult;
+use PhpQbittorrent\Validation\BasicValidationResult;
+use PhpQbittorrent\Exception\ValidationException;
 
 /**
  * 添加Torrent请求对象

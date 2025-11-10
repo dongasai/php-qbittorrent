@@ -5,7 +5,7 @@ namespace PhpQbittorrent\Tests\Unit\Collection;
 
 use PhpQbittorrent\Collection\TorrentCollection;
 use PhpQbittorrent\Enum\TorrentState;
-use PhpQbittorrent\Model\TorrentInfoV2;
+use PhpQbittorrent\Model\TorrentInfo;
 use PhpQbittorrent\Tests\TestCase;
 
 /**
@@ -19,7 +19,7 @@ class TorrentCollectionTest extends TestCase
     private function createTestTorrents(): array
     {
         return [
-            new TorrentInfoV2([
+            new TorrentInfo([
                 'hash' => 'hash1',
                 'name' => 'Test Torrent 1',
                 'size' => 1073741824,
@@ -32,7 +32,7 @@ class TorrentCollectionTest extends TestCase
                 'ratio' => 2.5,
                 'added_on' => 1609459200,
             ]),
-            new TorrentInfoV2([
+            new TorrentInfo([
                 'hash' => 'hash2',
                 'name' => 'Test Torrent 2',
                 'size' => 2147483648,
@@ -45,7 +45,7 @@ class TorrentCollectionTest extends TestCase
                 'ratio' => 1.2,
                 'added_on' => 1609545600,
             ]),
-            new TorrentInfoV2([
+            new TorrentInfo([
                 'hash' => 'hash3',
                 'name' => 'Test Torrent 3',
                 'size' => 536870912,
@@ -58,7 +58,7 @@ class TorrentCollectionTest extends TestCase
                 'ratio' => 1.0,
                 'added_on' => 1609632000,
             ]),
-            new TorrentInfoV2([
+            new TorrentInfo([
                 'hash' => 'hash4',
                 'name' => 'Test Torrent 4',
                 'size' => 1073741824,

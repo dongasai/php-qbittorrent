@@ -3,627 +3,370 @@ declare(strict_types=1);
 
 namespace PhpQbittorrent\Model;
 
-use PhpQbittorrent\Util\ValidationHelper;
+use JsonSerializable;
+use PhpQbittorrent\Enum\TorrentState;
 
 /**
- * Torrent信息模型
+ * Torrent信息模型 参数对象化
  *
- * 封装qBittorrent中的torrent信息数据
+ * 封装Torrent的完整信息，提供便捷的访问方法和状态判断
  */
-final class TorrentInfo
+class TorrentInfo implements JsonSerializable
 {
+    // 基本信息
     private string $hash;
     private string $name;
     private int $size;
+    private int $totalSize;
     private float $progress;
-    private int $dlSpeed;
-    private int $upSpeed;
+    private TorrentState $state;
     private int $priority;
-    private int $numSeeds;
-    private int $numComplete;
-    private int $numLeechs;
-    private int $numIncomplete;
-    private float $ratio;
+    private int $addedOn;
+    private ?int $completionOn;
+    private ?int $seenComplete;
+
+    // 状态和速度
+    private int $dlspeed;
+    private int $upspeed;
+    private int $dlLimit;
+    private int $upLimit;
     private int $eta;
-    private string $state;
+    private bool $forceStart;
+    private int $numSeeds;
+    private int $numLeechs;
+    private int $numComplete;
+    private int $numIncomplete;
+
+    // 连接和跟踪器
+    private string $tracker;
+    private float $ratio;
+    private float $maxRatio;
+    private int $ratioLimit;
+    private int $seedingTimeLimit;
+    private int $seedingTime;
+    private bool $autoTmm;
+    private bool $superSeeding;
+
+    // 路径和分类
+    private string $savePath;
+    private string $contentPath;
+    private string $category;
+    private string $tags;
+
+    // 下载和上传统计
+    private int $downloaded;
+    private int $uploaded;
+    private int $downloadedSession;
+    private int $uploadedSession;
+    private int $amountLeft;
+    private int $timeActive;
+    private int $lastActivity;
+
+    // 配置选项
     private bool $seqDl;
     private bool $fLPiecePrio;
-    private string $tracker;
-    private int $additionDate;
-    private int $completionDate;
-    private int $trackerTier;
-    private string $tags;
-    private string $savePath;
-    private ?string $comment = null;
-    private ?int $totalSize = null;
-    private ?int $completed = null;
-    private ?int $maxRatio = null;
-    private ?int $maxSeedingTime = null;
-    private ?float $ratioLimit = null;
-    private ?int $seedingTimeLimit = null;
-    private ?float $downloaded = null;
-    private ?float $uploaded = null;
-    private ?int $downloadSpeedLimit = null;
-    private ?int $uploadSpeedLimit = null;
-    private ?int $seedingTime = null;
-    private ?int $downloadTime = null;
-    private ?int $inactiveSeedingTime = null;
-    private ?int $reannounce = null;
-    private ?int $lastActivity = null;
-    private ?float $availability = null;
-    private ?int $piecesNum = null;
-    private ?int $pieceSize = null;
-    private ?string $pieceLength = null;
-    private ?bool $isChecking = null;
-    private ?bool $isPaused = null;
-    private ?bool $isAutoManaged = null;
-    private ?bool $isForced = null;
-    private ?bool $isSequential = null;
-    private ?bool $isFirstLastPiece = null;
+    private bool $isPrivate;
+    private string $magnetUri;
 
-    /**
-     * 从API响应数据创建TorrentInfo实例
-     *
-     * @param array $data API响应数据
-     * @return self
-     */
-    public static function fromArray(array $data): self
+    // 重新公告
+    private ?int $reannounce;
+
+    // 构造函数
+    public function __construct(array $data)
     {
-        $instance = new self();
+        $this->hash = $data['hash'] ?? '';
+        $this->name = $data['name'] ?? '';
+        $this->size = $data['size'] ?? 0;
+        $this->totalSize = $data['total_size'] ?? $data['size'] ?? 0;
+        $this->progress = $data['progress'] ?? 0.0;
+        $this->state = TorrentState::fromString($data['state'] ?? 'unknown');
+        $this->priority = $data['priority'] ?? 0;
+        $this->addedOn = $data['added_on'] ?? 0;
+        $this->completionOn = $data['completion_on'] ?? null;
+        $this->seenComplete = $data['seen_complete'] ?? null;
 
-        // 必需字段
-        $instance->hash = ValidationHelper::stringLength($data['hash'] ?? '', 1, 40, 'hash');
-        $instance->name = ValidationHelper::stringLength($data['name'] ?? '', 1, 1024, 'name');
+        $this->dlspeed = $data['dlspeed'] ?? 0;
+        $this->upspeed = $data['upspeed'] ?? 0;
+        $this->dlLimit = $data['dl_limit'] ?? -1;
+        $this->upLimit = $data['up_limit'] ?? -1;
+        $this->eta = $data['eta'] ?? -1;
+        $this->forceStart = $data['force_start'] ?? false;
+        $this->numSeeds = $data['num_seeds'] ?? 0;
+        $this->numLeechs = $data['num_leechs'] ?? 0;
+        $this->numComplete = $data['num_complete'] ?? -1;
+        $this->numIncomplete = $data['num_incomplete'] ?? -1;
 
-        // 数字字段
-        $instance->size = ValidationHelper::integer($data['size'] ?? 0, 0, null, 'size');
-        $instance->progress = ValidationHelper::float($data['progress'] ?? 0.0, 0.0, 1.0, 'progress');
-        $instance->dlSpeed = ValidationHelper::integer($data['dlspeed'] ?? 0, 0, null, 'dl_speed');
-        $instance->upSpeed = ValidationHelper::integer($data['upspeed'] ?? 0, 0, null, 'up_speed');
-        $instance->priority = ValidationHelper::integer($data['priority'] ?? 1, null, null, 'priority');
-        $instance->numSeeds = ValidationHelper::integer($data['num_seeds'] ?? 0, 0, null, 'num_seeds');
-        $instance->numComplete = ValidationHelper::integer($data['num_complete'] ?? 0, 0, null, 'num_complete');
-        $instance->numLeechs = ValidationHelper::integer($data['num_leechs'] ?? 0, 0, null, 'num_leechs');
-        $instance->numIncomplete = ValidationHelper::integer($data['num_incomplete'] ?? 0, 0, null, 'num_incomplete');
-        $instance->ratio = ValidationHelper::float($data['ratio'] ?? 0.0, 0.0, null, 'ratio');
-        $instance->eta = ValidationHelper::integer($data['eta'] ?? -1, -1, null, 'eta');
-        $instance->additionDate = ValidationHelper::integer($data['added_on'] ?? 0, 0, null, 'addition_date');
-        $instance->completionDate = ValidationHelper::integer($data['completion_on'] ?? 0, 0, null, 'completion_date');
-        $instance->trackerTier = ValidationHelper::integer($data['tracker_tier'] ?? 0, null, null, 'tracker_tier');
+        $this->tracker = $data['tracker'] ?? '';
+        $this->ratio = $data['ratio'] ?? 0.0;
+        $this->maxRatio = $data['max_ratio'] ?? -1.0;
+        $this->ratioLimit = $data['ratio_limit'] ?? -1.0;
+        $this->seedingTimeLimit = $data['seeding_time_limit'] ?? -1;
+        $this->seedingTime = $data['seeding_time'] ?? 0;
+        $this->autoTmm = $data['auto_tmm'] ?? false;
+        $this->superSeeding = $data['super_seeding'] ?? false;
 
-        // 字符串字段
-        $instance->state = ValidationHelper::enum(
-            $data['state'] ?? 'unknown',
-            ['unknown', 'error', 'missingFiles', 'uploading', 'pausedUP', 'stalledUP', 'checkingUP', 'forcedUP', 'allocating', 'downloading', 'metaDL', 'pausedDL', 'stalledDL', 'checkingDL', 'forcedDL', 'checkingResumeData', 'moving', 'queued', 'queuedDL', 'queuedUP'],
-            'state'
-        );
-        $instance->tracker = ValidationHelper::stringLength($data['tracker'] ?? '', 0, 2048, 'tracker');
-        $instance->tags = ValidationHelper::stringLength($data['tags'] ?? '', 0, 1024, 'tags');
-        $instance->savePath = ValidationHelper::stringLength($data['save_path'] ?? '', 1, 2048, 'save_path');
+        $this->savePath = $data['save_path'] ?? '';
+        $this->contentPath = $data['content_path'] ?? '';
+        $this->category = $data['category'] ?? '';
+        $this->tags = $data['tags'] ?? '';
 
-        // 布尔字段
-        $instance->seqDl = ValidationHelper::boolean($data['seq_dl'] ?? false, 'seq_dl');
-        $instance->fLPiecePrio = ValidationHelper::boolean($data['f_l_piece_prio'] ?? false, 'f_l_piece_prio');
+        $this->downloaded = $data['downloaded'] ?? 0;
+        $this->uploaded = $data['uploaded'] ?? 0;
+        $this->downloadedSession = $data['downloaded_session'] ?? 0;
+        $this->uploadedSession = $data['uploaded_session'] ?? 0;
+        $this->amountLeft = $data['amount_left'] ?? $this->size;
+        $this->timeActive = $data['time_active'] ?? 0;
+        $this->lastActivity = $data['last_activity'] ?? 0;
 
-        // 可选字段
-        $instance->comment = $data['comment'] ?? null;
-        $instance->totalSize = isset($data['total_size']) ? ValidationHelper::integer($data['total_size'], 0, null, 'total_size') : null;
-        $instance->completed = isset($data['completed']) ? ValidationHelper::integer($data['completed'], 0, null, 'completed') : null;
-        $instance->maxRatio = isset($data['max_ratio']) ? ValidationHelper::integer($data['max_ratio'], -1, null, 'max_ratio') : null;
-        $instance->maxSeedingTime = isset($data['max_seeding_time']) ? ValidationHelper::integer($data['max_seeding_time'], -1, null, 'max_seeding_time') : null;
-        $instance->ratioLimit = isset($data['ratio_limit']) ? ValidationHelper::float($data['ratio_limit'], -1.0, null, 'ratio_limit') : null;
-        $instance->seedingTimeLimit = isset($data['seeding_time_limit']) ? ValidationHelper::integer($data['seeding_time_limit'], -1, null, 'seeding_time_limit') : null;
-        $instance->downloaded = isset($data['downloaded']) ? ValidationHelper::float($data['downloaded'], 0.0, null, 'downloaded') : null;
-        $instance->uploaded = isset($data['uploaded']) ? ValidationHelper::float($data['uploaded'], 0.0, null, 'uploaded') : null;
-        $instance->downloadSpeedLimit = isset($data['dl_limit']) ? ValidationHelper::integer($data['dl_limit'], 0, null, 'dl_limit') : null;
-        $instance->uploadSpeedLimit = isset($data['up_limit']) ? ValidationHelper::integer($data['up_limit'], 0, null, 'up_limit') : null;
-        $instance->seedingTime = isset($data['seeding_time']) ? ValidationHelper::integer($data['seeding_time'], 0, null, 'seeding_time') : null;
-        $instance->downloadTime = isset($data['download_time']) ? ValidationHelper::integer($data['download_time'], 0, null, 'download_time') : null;
-        $instance->inactiveSeedingTime = isset($data['inactive_seeding_time']) ? ValidationHelper::integer($data['inactive_seeding_time'], 0, null, 'inactive_seeding_time') : null;
-        $instance->reannounce = isset($data['reannounce']) ? ValidationHelper::integer($data['reannounce'], 0, null, 'reannounce') : null;
-        $instance->lastActivity = isset($data['last_activity']) ? ValidationHelper::integer($data['last_activity'], 0, null, 'last_activity') : null;
-        $instance->availability = isset($data['availability']) ? ValidationHelper::float($data['availability'], 0.0, 1.0, 'availability') : null;
-        $instance->piecesNum = isset($data['pieces_num']) ? ValidationHelper::integer($data['pieces_num'], 0, null, 'pieces_num') : null;
-        $instance->pieceSize = isset($data['piece_size']) ? ValidationHelper::integer($data['piece_size'], 0, null, 'piece_size') : null;
-        $instance->pieceLength = isset($data['piece_length']) ? ValidationHelper::stringLength($data['piece_length'], 0, 20, 'piece_length') : null;
-        $instance->isChecking = isset($data['is_checking']) ? ValidationHelper::boolean($data['is_checking'], 'is_checking') : null;
-        $instance->isPaused = isset($data['is_paused']) ? ValidationHelper::boolean($data['is_paused'], 'is_paused') : null;
-        $instance->isAutoManaged = isset($data['is_auto_managed']) ? ValidationHelper::boolean($data['is_auto_managed'], 'is_auto_managed') : null;
-        $instance->isForced = isset($data['is_forced']) ? ValidationHelper::boolean($data['is_forced'], 'is_forced') : null;
-        $instance->isSequential = isset($data['is_sequential']) ? ValidationHelper::boolean($data['is_sequential'], 'is_sequential') : null;
-        $instance->isFirstLastPiece = isset($data['is_first_last_piece']) ? ValidationHelper::boolean($data['is_first_last_piece'], 'is_first_last_piece') : null;
+        $this->seqDl = $data['seq_dl'] ?? false;
+        $this->fLPiecePrio = $data['f_l_piece_prio'] ?? false;
+        $this->isPrivate = $data['isPrivate'] ?? false;
+        $this->magnetUri = $data['magnet_uri'] ?? '';
 
-        return $instance;
+        $this->reannounce = $data['reannounce'] ?? null;
     }
 
-    // Getters
-    public function getHash(): string
-    {
-        return $this->hash;
-    }
+    // 基本信息
+    public function getHash(): string { return $this->hash; }
+    public function getName(): string { return $this->name; }
+    public function getSize(): int { return $this->size; }
+    public function getTotalSize(): int { return $this->totalSize; }
+    public function getProgress(): float { return $this->progress; }
+    public function getState(): TorrentState { return $this->state; }
+    public function getPriority(): int { return $this->priority; }
+    public function getAddedOn(): int { return $this->addedOn; }
+    public function getCompletionOn(): ?int { return $this->completionOn; }
+    public function getSeenComplete(): ?int { return $this->seenComplete; }
 
-    public function getName(): string
-    {
-        return $this->name;
-    }
+    // 状态和速度
+    public function getDownloadSpeed(): int { return $this->dlspeed; }
+    public function getUploadSpeed(): int { return $this->upspeed; }
+    public function getDownloadLimit(): int { return $this->dlLimit; }
+    public function getUploadLimit(): int { return $this->upLimit; }
+    public function getEta(): int { return $this->eta; }
+    public function isForceStarted(): bool { return $this->forceStart; }
 
-    public function getSize(): int
-    {
-        return $this->size;
-    }
+    // 连接信息
+    public function getSeedCount(): int { return $this->numSeeds; }
+    public function getLeechCount(): int { return $this->numLeechs; }
+    public function getTotalSeedCount(): int { return $this->numComplete; }
+    public function getTotalLeechCount(): int { return $this->numIncomplete; }
 
-    public function getProgress(): float
-    {
-        return $this->progress;
-    }
+    // 跟踪器和比率
+    public function getTracker(): string { return $this->tracker; }
+    public function getRatio(): float { return $this->ratio; }
+    public function getMaxRatio(): float { return $this->maxRatio; }
+    public function getRatioLimit(): float { return $this->ratioLimit; }
 
-    public function getProgressPercentage(): int
-    {
-        return (int) ($this->progress * 100);
-    }
+    // 路径和分类
+    public function getSavePath(): string { return $this->savePath; }
+    public function getContentPath(): string { return $this->contentPath; }
+    public function getCategory(): string { return $this->category; }
+    public function getTags(): string { return $this->tags; }
 
-    public function getDownloadSpeed(): int
-    {
-        return $this->dlSpeed;
-    }
+    // 统计信息
+    public function getDownloaded(): int { return $this->downloaded; }
+    public function getUploaded(): int { return $this->uploaded; }
+    public function getSessionDownloaded(): int { return $this->downloadedSession; }
+    public function getSessionUploaded(): int { return $this->uploadedSession; }
+    public function getAmountLeft(): int { return $this->amountLeft; }
+    public function getTimeActive(): int { return $this->timeActive; }
+    public function getLastActivity(): int { return $this->lastActivity; }
 
-    public function getUploadSpeed(): int
-    {
-        return $this->upSpeed;
-    }
+    // 配置
+    public function isSequentialDownload(): bool { return $this->seqDl; }
+    public function isFirstLastPiecePriority(): bool { return $this->fLPiecePrio; }
+    public function isPrivate(): bool { return $this->isPrivate; }
+    public function getMagnetUri(): string { return $this->magnetUri; }
+    public function getReannounce(): ?int { return $this->reannounce; }
 
-    public function getPriority(): int
-    {
-        return $this->priority;
-    }
-
-    public function getNumSeeds(): int
-    {
-        return $this->numSeeds;
-    }
-
-    public function getNumComplete(): int
-    {
-        return $this->numComplete;
-    }
-
-    public function getNumLeechs(): int
-    {
-        return $this->numLeechs;
-    }
-
-    public function getNumIncomplete(): int
-    {
-        return $this->numIncomplete;
-    }
-
-    public function getRatio(): float
-    {
-        return $this->ratio;
-    }
-
-    public function getEta(): int
-    {
-        return $this->eta;
-    }
-
-    public function getState(): string
-    {
-        return $this->state;
-    }
-
-    public function isSeqDl(): bool
-    {
-        return $this->seqDl;
-    }
-
-    public function isFLPiecePrio(): bool
-    {
-        return $this->fLPiecePrio;
-    }
-
-    public function getTracker(): string
-    {
-        return $this->tracker;
-    }
-
-    public function getAdditionDate(): int
-    {
-        return $this->additionDate;
-    }
-
-    public function getCompletionDate(): int
-    {
-        return $this->completionDate;
-    }
-
-    public function getTrackerTier(): int
-    {
-        return $this->trackerTier;
-    }
-
-    public function getTags(): string
-    {
-        return $this->tags;
-    }
-
-    public function getSavePath(): string
-    {
-        return $this->savePath;
-    }
-
-    public function getComment(): ?string
-    {
-        return $this->comment;
-    }
-
-    public function getTotalSize(): ?int
-    {
-        return $this->totalSize;
-    }
-
-    public function getCompleted(): ?int
-    {
-        return $this->completed;
-    }
-
-    public function getMaxRatio(): ?int
-    {
-        return $this->maxRatio;
-    }
-
-    public function getMaxSeedingTime(): ?int
-    {
-        return $this->maxSeedingTime;
-    }
-
-    public function getRatioLimit(): ?float
-    {
-        return $this->ratioLimit;
-    }
-
-    public function getSeedingTimeLimit(): ?int
-    {
-        return $this->seedingTimeLimit;
-    }
-
-    public function getDownloaded(): ?float
-    {
-        return $this->downloaded;
-    }
-
-    public function getUploaded(): ?float
-    {
-        return $this->uploaded;
-    }
-
-    public function getDownloadSpeedLimit(): ?int
-    {
-        return $this->downloadSpeedLimit;
-    }
-
-    public function getUploadSpeedLimit(): ?int
-    {
-        return $this->uploadSpeedLimit;
-    }
-
-    public function getSeedingTime(): ?int
-    {
-        return $this->seedingTime;
-    }
-
-    public function getDownloadTime(): ?int
-    {
-        return $this->downloadTime;
-    }
-
-    public function getInactiveSeedingTime(): ?int
-    {
-        return $this->inactiveSeedingTime;
-    }
-
-    public function getReannounce(): ?int
-    {
-        return $this->reannounce;
-    }
-
-    public function getLastActivity(): ?int
-    {
-        return $this->lastActivity;
-    }
-
-    public function getAvailability(): ?float
-    {
-        return $this->availability;
-    }
-
-    public function getPiecesNum(): ?int
-    {
-        return $this->piecesNum;
-    }
-
-    public function getPieceSize(): ?int
-    {
-        return $this->pieceSize;
-    }
-
-    public function getPieceLength(): ?string
-    {
-        return $this->pieceLength;
-    }
-
-    public function isChecking(): ?bool
-    {
-        return $this->isChecking;
-    }
-
-    public function isPaused(): ?bool
-    {
-        return $this->isPaused;
-    }
-
-    public function isAutoManaged(): ?bool
-    {
-        return $this->isAutoManaged;
-    }
-
-    public function isForced(): ?bool
-    {
-        return $this->isForced;
-    }
-
-    public function isSequential(): ?bool
-    {
-        return $this->isSequential;
-    }
-
-    public function isFirstLastPiece(): ?bool
-    {
-        return $this->isFirstLastPiece;
-    }
+    // 格式化方法
+    public function getFormattedSize(): string { return $this->formatBytes($this->size); }
+    public function getFormattedProgress(): string { return number_format($this->progress * 100, 2) . '%'; }
+    public function getFormattedDownloadSpeed(): string { return $this->formatSpeed($this->dlspeed); }
+    public function getFormattedUploadSpeed(): string { return $this->formatSpeed($this->upspeed); }
+    public function getFormattedRatio(): string { return number_format($this->ratio, 3); }
+    public function getFormattedEta(): string { return $this->formatTime($this->eta); }
 
     // 状态判断方法
-    public function isActive(): bool
+    public function isCompleted(): bool { return $this->state->isCompleted(); }
+    public function isDownloading(): bool { return $this->state->isDownloading(); }
+    public function isUploading(): bool { return $this->state->isUploading(); }
+    public function isPaused(): bool { return $this->state->isPaused(); }
+    public function isActive(): bool { return $this->state->isActive(); }
+    public function isStalled(): bool { return in_array($this->state, [TorrentState::STALLED_DL, TorrentState::STALLED_UP]); }
+    public function hasError(): bool { return $this->state->isError(); }
+
+    // 便利方法
+    public function getTagArray(): array
     {
-        return in_array($this->state, ['downloading', 'uploading', 'forcedDL', 'forcedUP', 'stalledDL', 'stalledUP']);
+        return empty($this->tags) ? [] : explode(',', $this->tags);
     }
 
-    public function isCompleted(): bool
+    public function hasTag(string $tag): bool
     {
-        return $this->progress >= 1.0 || in_array($this->state, ['uploading', 'stalledUP', 'forcedUP', 'pausedUP', 'checkingUP']);
+        return in_array($tag, $this->getTagArray());
     }
 
-    public function isDownloading(): bool
+    public function hasCategory(): bool
     {
-        return in_array($this->state, ['downloading', 'forcedDL', 'stalledDL']);
+        return !empty($this->category);
     }
 
-    public function isUploading(): bool
+    public function isCompletedOrSeeding(): bool
     {
-        return in_array($this->state, ['uploading', 'stalledUP', 'forcedUP']);
+        return $this->progress >= 1.0 || $this->isUploading();
     }
 
-    public function isPaused(): bool
+    public function getCompletionPercentage(): float
     {
-        return in_array($this->state, ['pausedDL', 'pausedUP']);
+        return $this->progress * 100;
     }
 
-    public function isQueued(): bool
+    public function getRemainingSize(): int
     {
-        return in_array($this->state, ['queuedDL', 'queuedUP']);
+        return $this->amountLeft;
     }
 
-    public function hasError(): bool
+    public function getDownloadedPercentage(): float
     {
-        return $this->state === 'error';
+        if ($this->totalSize == 0) return 0;
+        return (($this->totalSize - $this->amountLeft) / $this->totalSize) * 100;
     }
 
-    public function isStalled(): bool
+    public function getAge(): int
     {
-        return in_array($this->state, ['stalledDL', 'stalledUP']);
+        return time() - $this->addedOn;
     }
 
-    public function getFormattedSize(): string
+    public function getFormattedAge(): string
     {
-        return $this->formatBytes($this->size);
+        return $this->formatTime($this->getAge());
     }
 
-    public function getFormattedDownloadSpeed(): string
+    public function hasActivity(): bool
     {
-        return $this->formatBytes($this->dlSpeed) . '/s';
+        return ($this->dlspeed > 0 || $this->upspeed > 0);
     }
 
-    public function getFormattedUploadSpeed(): string
+    public function getSpeedRank(): string
     {
-        return $this->formatBytes($this->upSpeed) . '/s';
+        $totalSpeed = $this->dlspeed + $this->upspeed;
+
+        if ($totalSpeed >= 10 * 1024 * 1024) return '高速';
+        if ($totalSpeed >= 1 * 1024 * 1024) return '中速';
+        if ($totalSpeed > 0) return '低速';
+        return '静止';
     }
 
-    public function getFormattedRatio(): string
+    // 静态工具方法
+    public static function fromArray(array $data): self
     {
-        return number_format($this->ratio, 2);
+        return new self($data);
     }
 
-    public function getFormattedEta(): string
+    // 私有格式化方法
+    private function formatBytes(int $bytes): string
     {
-        if ($this->eta <= 0) {
-            return '∞';
-        }
+        if ($bytes == 0) return '0 B';
 
-        $hours = floor($this->eta / 3600);
-        $minutes = floor(($this->eta % 3600) / 60);
-        $seconds = $this->eta % 60;
-
-        if ($hours > 24) {
-            $days = floor($hours / 24);
-            $hours = $hours % 24;
-            return sprintf('%dd %02d:%02d:%02d', $days, $hours, $minutes, $seconds);
-        }
-
-        return sprintf('%02d:%02d:%02d', $hours, $minutes, $seconds);
-    }
-
-    public function getFormattedAdditionDate(): string
-    {
-        return date('Y-m-d H:i:s', $this->additionDate);
-    }
-
-    public function getFormattedCompletionDate(): string
-    {
-        return $this->completionDate > 0 ? date('Y-m-d H:i:s', $this->completionDate) : 'Never';
-    }
-
-    public function getStateDisplayName(): string
-    {
-        $stateNames = [
-            'unknown' => 'Unknown',
-            'error' => 'Error',
-            'missingFiles' => 'Missing Files',
-            'uploading' => 'Uploading',
-            'pausedUP' => 'Paused (Upload)',
-            'stalledUP' => 'Stalled (Upload)',
-            'checkingUP' => 'Checking (Upload)',
-            'forcedUP' => 'Forced (Upload)',
-            'allocating' => 'Allocating',
-            'downloading' => 'Downloading',
-            'metaDL' => 'Downloading Metadata',
-            'pausedDL' => 'Paused (Download)',
-            'stalledDL' => 'Stalled (Download)',
-            'checkingDL' => 'Checking (Download)',
-            'forcedDL' => 'Forced (Download)',
-            'checkingResumeData' => 'Checking Resume Data',
-            'moving' => 'Moving',
-            'queued' => 'Queued',
-            'queuedDL' => 'Queued (Download)',
-            'queuedUP' => 'Queued (Upload)'
-        ];
-
-        return $stateNames[$this->state] ?? 'Unknown';
-    }
-
-    public function toArray(): array
-    {
-        $data = [
-            'hash' => $this->hash,
-            'name' => $this->name,
-            'size' => $this->size,
-            'progress' => $this->progress,
-            'progress_percentage' => $this->getProgressPercentage(),
-            'dl_speed' => $this->dlSpeed,
-            'up_speed' => $this->upSpeed,
-            'priority' => $this->priority,
-            'num_seeds' => $this->numSeeds,
-            'num_complete' => $this->numComplete,
-            'num_leechs' => $this->numLeechs,
-            'num_incomplete' => $this->numIncomplete,
-            'ratio' => $this->ratio,
-            'eta' => $this->eta,
-            'state' => $this->state,
-            'state_display_name' => $this->getStateDisplayName(),
-            'seq_dl' => $this->seqDl,
-            'f_l_piece_prio' => $this->fLPiecePrio,
-            'tracker' => $this->tracker,
-            'addition_date' => $this->additionDate,
-            'completion_date' => $this->completionDate,
-            'tracker_tier' => $this->trackerTier,
-            'tags' => $this->tags,
-            'save_path' => $this->savePath,
-        ];
-
-        // 添加可选字段
-        $optionalFields = [
-            'comment', 'total_size', 'completed', 'max_ratio', 'max_seeding_time',
-            'ratio_limit', 'seeding_time_limit', 'downloaded', 'uploaded',
-            'dl_limit', 'up_limit', 'seeding_time', 'download_time',
-            'inactive_seeding_time', 'reannounce', 'last_activity',
-            'availability', 'pieces_num', 'piece_size', 'piece_length',
-            'is_checking', 'is_paused', 'is_auto_managed', 'is_forced',
-            'is_sequential', 'is_first_last_piece'
-        ];
-
-        foreach ($optionalFields as $field) {
-            $property = lcfirst(str_replace('_', '', ucwords($field, '_')));
-            if ($this->$property !== null) {
-                $data[$field] = $this->$property;
-            }
-        }
-
-        // 添加格式化字段
-        $data['formatted'] = [
-            'size' => $this->getFormattedSize(),
-            'download_speed' => $this->getFormattedDownloadSpeed(),
-            'upload_speed' => $this->getFormattedUploadSpeed(),
-            'ratio' => $this->getFormattedRatio(),
-            'eta' => $this->getFormattedEta(),
-            'addition_date' => $this->getFormattedAdditionDate(),
-            'completion_date' => $this->getFormattedCompletionDate()
-        ];
-
-        // 添加状态标志
-        $data['status_flags'] = [
-            'is_active' => $this->isActive(),
-            'is_completed' => $this->isCompleted(),
-            'is_downloading' => $this->isDownloading(),
-            'is_uploading' => $this->isUploading(),
-            'is_paused' => $this->isPaused(),
-            'is_queued' => $this->isQueued(),
-            'has_error' => $this->hasError(),
-            'is_stalled' => $this->isStalled()
-        ];
-
-        return $data;
-    }
-
-    /**
-     * 格式化字节数为可读格式
-     */
-    private function formatBytes(int $bytes, int $precision = 2): string
-    {
-        $units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
         $bytes = max($bytes, 0);
         $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
         $pow = min($pow, count($units) - 1);
+
         $bytes /= (1 << (10 * $pow));
 
-        return round($bytes, $precision) . ' ' . $units[$pow];
+        return round($bytes, 2) . ' ' . $units[$pow];
     }
 
-    /**
-     * 验证torrent状态是否一致
-     *
-     * @return array 验证结果
-     */
-    public function validate(): array
+    private function formatSpeed(int $bytesPerSecond): string
     {
-        $errors = [];
+        return $this->formatBytes($bytesPerSecond) . '/s';
+    }
 
-        if (empty($this->hash)) {
-            $errors['hash'] = 'Torrent hash不能为空';
-        }
+    private function formatTime(int $seconds): string
+    {
+        if ($seconds <= 0) return '∞';
+        if ($seconds < 60) return "{$seconds}秒";
+        if ($seconds < 3600) return floor($seconds / 60) . '分钟';
+        if ($seconds < 86400) return floor($seconds / 3600) . '小时';
+        return floor($seconds / 86400) . '天';
+    }
 
-        if (empty($this->name)) {
-            $errors['name'] = 'Torrent名称不能为空';
-        }
+    // 转换为数组
+    public function toArray(): array
+    {
+        return [
+            // 基本信息
+            'hash' => $this->hash,
+            'name' => $this->name,
+            'size' => $this->size,
+            'total_size' => $this->totalSize,
+            'progress' => $this->progress,
+            'state' => $this->state->value,
+            'priority' => $this->priority,
+            'added_on' => $this->addedOn,
+            'completion_on' => $this->completionOn,
+            'seen_complete' => $this->seenComplete,
 
-        if ($this->size < 0) {
-            $errors['size'] = 'Torrent大小不能为负数';
-        }
+            // 状态和速度
+            'dlspeed' => $this->dlspeed,
+            'upspeed' => $this->upspeed,
+            'dl_limit' => $this->dlLimit,
+            'up_limit' => $this->upLimit,
+            'eta' => $this->eta,
+            'force_start' => $this->forceStart,
+            'num_seeds' => $this->numSeeds,
+            'num_leechs' => $this->numLeechs,
+            'num_complete' => $this->numComplete,
+            'num_incomplete' => $this->numIncomplete,
 
-        if ($this->progress < 0 || $this->progress > 1) {
-            $errors['progress'] = '进度值必须在0-1之间';
-        }
+            // 跟踪器和比率
+            'tracker' => $this->tracker,
+            'ratio' => $this->ratio,
+            'max_ratio' => $this->maxRatio,
+            'ratio_limit' => $this->ratioLimit,
 
-        if ($this->dlSpeed < 0) {
-            $errors['dl_speed'] = '下载速度不能为负数';
-        }
+            // 路径和分类
+            'save_path' => $this->savePath,
+            'content_path' => $this->contentPath,
+            'category' => $this->category,
+            'tags' => $this->tags,
 
-        if ($this->upSpeed < 0) {
-            $errors['up_speed'] = '上传速度不能为负数';
-        }
+            // 统计信息
+            'downloaded' => $this->downloaded,
+            'uploaded' => $this->uploaded,
+            'downloaded_session' => $this->downloadedSession,
+            'uploaded_session' => $this->uploadedSession,
+            'amount_left' => $this->amountLeft,
+            'time_active' => $this->timeActive,
+            'last_activity' => $this->lastActivity,
 
-        if ($this->ratio < 0) {
-            $errors['ratio'] = '分享比例不能为负数';
-        }
+            // 配置
+            'seq_dl' => $this->seqDl,
+            'f_l_piece_prio' => $this->fLPiecePrio,
+            'isPrivate' => $this->isPrivate,
+            'magnet_uri' => $this->magnetUri,
+            'reannounce' => $this->reannounce,
 
-        return $errors;
+            // 计算属性
+            'formatted_size' => $this->getFormattedSize(),
+            'formatted_progress' => $this->getFormattedProgress(),
+            'formatted_download_speed' => $this->getFormattedDownloadSpeed(),
+            'formatted_upload_speed' => $this->getFormattedUploadSpeed(),
+            'formatted_ratio' => $this->getFormattedRatio(),
+            'formatted_eta' => $this->getFormattedEta(),
+            'tag_array' => $this->getTagArray(),
+            'completion_percentage' => $this->getCompletionPercentage(),
+            'age' => $this->getAge(),
+            'formatted_age' => $this->getFormattedAge(),
+            'speed_rank' => $this->getSpeedRank(),
+        ];
+    }
+
+    public function jsonSerialize(): array
+    {
+        return $this->toArray();
     }
 }

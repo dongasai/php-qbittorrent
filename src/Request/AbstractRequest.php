@@ -1,11 +1,11 @@
 <?php
 declare(strict_types=1);
 
-namespace Dongasai\qBittorrent\Request;
+namespace PhpQbittorrent\Request;
 
-use Dongasai\qBittorrent\Contract\RequestInterface as RequestContract;
-use Dongasai\qBittorrent\Validation\BasicValidationResult;
-use Dongasai\qBittorrent\Contract\ValidationResult;
+use PhpQbittorrent\Contract\RequestInterface as RequestContract;
+use PhpQbittorrent\Validation\BasicValidationResult;
+use PhpQbittorrent\Contract\ValidationResult;
 
 /**
  * 抽象请求基类

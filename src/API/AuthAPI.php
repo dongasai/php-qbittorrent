@@ -3,276 +3,447 @@ declare(strict_types=1);
 
 namespace PhpQbittorrent\API;
 
-use PhpQbittorrent\Transport\TransportInterface;
-use PhpQbittorrent\Exception\{
-    AuthenticationException,
-    NetworkException,
-    ClientException
-};
+use PhpQbittorrent\Contract\ApiInterface;
+use PhpQbittorrent\Contract\TransportInterface;
+use PhpQbittorrent\Contract\TransportResponse;
+use PhpQbittorrent\Request\Auth\LoginRequest;
+use PhpQbittorrent\Request\Auth\LogoutRequest;
+use PhpQbittorrent\Response\Auth\LoginResponse;
+use PhpQbittorrent\Response\Auth\LogoutResponse;
+use PhpQbittorrent\Exception\NetworkException;
+use PhpQbittorrent\Exception\ApiRuntimeException;
+use PhpQbittorrent\Exception\ValidationException;
 
 /**
- * 认证API类
+ * 认证API 参数对象化
  *
- * 处理qBittorrent的登录、登出和认证相关操作
+ * 提供用户登录、登出和认证状态管理功能
  */
-final class AuthAPI
+class AuthAPI implements ApiInterface
 {
+    /** @var TransportInterface 传输层实例 */
     private TransportInterface $transport;
 
+    /** @var string|null 当前会话ID */
+    private ?string $currentSessionId = null;
+
+    /** @var string|null 当前用户名 */
+    private ?string $currentUsername = null;
+
+    /** @var int|null 会话过期时间 */
+    private ?int $sessionExpiresAt = null;
+
+    /**
+     * 构造函数
+     *
+     * @param TransportInterface $transport 传输层实例
+     */
     public function __construct(TransportInterface $transport)
     {
         $this->transport = $transport;
     }
 
     /**
-     * 登录qBittorrent
+     * 获取API的基础路径
      *
-     * @param string $username 用户名
-     * @param string $password 密码
-     * @return bool 登录是否成功
-     * @throws AuthenticationException 认证失败
-     * @throws NetworkException 网络错误
+     * @return string API基础路径
      */
-    public function login(string $username, string $password): bool
+    public function getBasePath(): string
     {
+        return '/api/v2/auth';
+    }
+
+    /**
+     * 获取传输层实例
+     *
+     * @return TransportInterface 传输层实例
+     */
+    public function getTransport(): TransportInterface
+    {
+        return $this->transport;
+    }
+
+    /**
+     * 设置传输层实例
+     *
+     * @param TransportInterface $transport 传输层实例
+     * @return static 返回自身以支持链式调用
+     */
+    public function setTransport(TransportInterface $transport): static
+    {
+        $this->transport = $transport;
+        return $this;
+    }
+
+    /**
+     * 执行GET请求
+     *
+     * @param string $endpoint API端点
+     * @param array<string, mixed> $parameters 请求参数
+     * @param array<string, string> $headers 请求头
+     * @return \PhpQbittorrent\Contract\ResponseInterface 响应对象
+     */
+    public function get(string $endpoint, array $parameters = [], array $headers = []): \PhpQbittorrent\Contract\ResponseInterface
+    {
+        $url = $this->getBasePath() . $endpoint;
+        $transportResponse = $this->transport->get($url, $parameters, $headers);
+        return $this->createGenericResponse($transportResponse);
+    }
+
+    /**
+     * 执行POST请求
+     *
+     * @param string $endpoint API端点
+     * @param array<string, mixed> $data 请求数据
+     * @param array<string, string> $headers 请求头
+     * @return \PhpQbittorrent\Contract\ResponseInterface 响应对象
+     */
+    public function post(string $endpoint, array $data = [], array $headers = []): \PhpQbittorrent\Contract\ResponseInterface
+    {
+        $url = $this->getBasePath() . $endpoint;
+        $transportResponse = $this->transport->post($url, $data, $headers);
+        return $this->createGenericResponse($transportResponse);
+    }
+
+    /**
+     * 用户登录
+     *
+     * @param LoginRequest $request 登录请求对象
+     * @return LoginResponse 登录响应对象
+     * @throws NetworkException 网络异常
+     * @throws ValidationException 验证异常
+     * @throws ApiRuntimeException API运行时异常
+     */
+    public function login(LoginRequest $request): LoginResponse
+    {
+        // 验证请求
+        $validation = $request->validate();
+        if (!$validation->isValid()) {
+            throw ValidationException::fromValidationResult(
+                $validation,
+                'Login request validation failed'
+            );
+        }
+
         try {
-            $response = $this->transport->request('POST', '/api/v2/auth/login', [
-                'form_params' => [
-                    'username' => $username,
-                    'password' => $password
-                ]
-            ]);
-
-            // qBittorrent登录成功时返回空数组
-            if (empty($response)) {
-                // 检查是否有Set-Cookie头（这里简化处理）
-                $lastResponseCode = $this->transport->getLastResponseCode();
-
-                if ($lastResponseCode === 200) {
-                    // 在实际实现中，应该从响应头中提取SID cookie
-                    // 这里暂时返回true，实际的cookie管理在传输层处理
-                    return true;
-                } else {
-                    throw new AuthenticationException(
-                        '登录失败：服务器返回错误状态码',
-                        'LOGIN_FAILED',
-                        ['status_code' => $lastResponseCode]
-                    );
-                }
-            }
-
-            throw new AuthenticationException(
-                '登录失败：意外的服务器响应',
-                'UNEXPECTED_RESPONSE'
+            // 发送登录请求
+            $url = $this->getBasePath() . $request->getEndpoint();
+            $transportResponse = $this->transport->post(
+                $url,
+                $request->toArray(),
+                $request->getHeaders()
             );
 
-        } catch (AuthenticationException $e) {
-            throw $e;
+            // 处理响应
+            return $this->handleLoginResponse($transportResponse, $request);
+
         } catch (NetworkException $e) {
-            throw new NetworkException(
-                '登录失败：网络连接错误',
-                'NETWORK_ERROR',
-                [],
+            throw new ApiRuntimeException(
+                'Login failed due to network error: ' . $e->getMessage(),
+                'LOGIN_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url,
                 'POST',
-                '/api/v2/auth/login'
-            );
-        } catch (ClientException $e) {
-            if ($e->getHttpStatusCode() === 403) {
-                throw new AuthenticationException(
-                    '登录失败：IP地址被禁止访问',
-                    'IP_BLOCKED',
-                    [],
-                    null,
-                    '检查qBittorrent的安全设置或尝试更换IP地址'
-                );
-            }
-
-            if ($e->getHttpStatusCode() === 401) {
-                throw new AuthenticationException(
-                    '登录失败：用户名或密码错误',
-                    'INVALID_CREDENTIALS'
-                );
-            }
-
-            throw new AuthenticationException(
-                '登录失败：' . $e->getMessage(),
-                'LOGIN_ERROR',
-                $e->getErrorDetails()
+                null,
+                ['request_summary' => $request->getSummary()],
+                $e
             );
         }
     }
 
     /**
-     * 登出qBittorrent
+     * 用户登出
      *
-     * @return bool 登出是否成功
-     * @throws ClientException 登出失败
+     * @param LogoutRequest $request 登出请求对象
+     * @return LogoutResponse 登出响应对象
+     * @throws NetworkException 网络异常
+     * @throws ValidationException 验证异常
+     * @throws ApiRuntimeException API运行时异常
      */
-    public function logout(): bool
+    public function logout(LogoutRequest $request): LogoutResponse
     {
-        try {
-            $this->transport->request('POST', '/api/v2/auth/logout');
-            return true;
+        // 验证请求
+        $validation = $request->validate();
+        if (!$validation->isValid()) {
+            throw ValidationException::fromValidationResult(
+                $validation,
+                'Logout request validation failed'
+            );
+        }
 
-        } catch (ClientException $e) {
-            // 即使登出失败，也不应该抛出严重异常
-            // 因为可能只是会话已经过期
-            return false;
+        try {
+            // 发送登出请求
+            $url = $this->getBasePath() . $request->getEndpoint();
+            $transportResponse = $this->transport->post(
+                $url,
+                $request->toArray(),
+                $request->getHeaders()
+            );
+
+            // 处理响应
+            return $this->handleLogoutResponse($transportResponse, $request);
+
+        } catch (NetworkException $e) {
+            throw new ApiRuntimeException(
+                'Logout failed due to network error: ' . $e->getMessage(),
+                'LOGOUT_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url,
+                'POST',
+                null,
+                ['request_summary' => $request->getSummary()],
+                $e
+            );
         }
     }
 
     /**
-     * 检查认证状态
+     * 检查登录状态
      *
-     * @return bool 是否已认证
+     * @return bool 是否已登录
      */
     public function isLoggedIn(): bool
     {
         try {
-            // 尝试访问一个需要认证的API来检查登录状态
-            $this->transport->request('GET', '/api/v2/torrents/info');
-            return true;
-        } catch (ClientException $e) {
-            if ($e->getHttpStatusCode() === 401 || $e->getHttpStatusCode() === 403) {
-                return false;
-            }
-            // 其他错误可能是网络问题，不应认为是未认证
-            return true;
-        }
-    }
-
-    /**
-     * 获取当前认证的Cookie值
-     *
-     * @return string|null Cookie值
-     */
-    public function getAuthCookie(): ?string
-    {
-        return $this->transport->getAuthentication();
-    }
-
-    /**
-     * 设置认证Cookie
-     *
-     * @param string|null $cookie Cookie值
-     */
-    public function setAuthCookie(?string $cookie): void
-    {
-        $this->transport->setAuthentication($cookie);
-    }
-
-    /**
-     * 验证认证Cookie是否有效
-     *
-     * @param string $cookie Cookie值
-     * @return bool 是否有效
-     */
-    public function validateCookie(string $cookie): bool
-    {
-        try {
-            $originalCookie = $this->getAuthCookie();
-            $this->setAuthCookie($cookie);
-
-            $isValid = $this->isLoggedIn();
-            $this->setAuthCookie($originalCookie);
-
-            return $isValid;
-        } catch (ClientException $e) {
+            // 通过访问应用版本API来检查登录状态
+            $url = $this->transport->getBaseUrl() . '/api/v2/app/version';
+            $response = $this->transport->get($url);
+            return $response->getStatusCode() === 200;
+        } catch (NetworkException $e) {
             return false;
         }
     }
 
     /**
-     * 延长会话有效期
+     * 获取当前会话信息
      *
-     * 在某些qBittorrent配置中，会话可能需要定期刷新
-     *
-     * @return bool 是否成功延长会话
+     * @return array<string, mixed> 会话信息
      */
-    public function refreshSession(): bool
+    public function getCurrentSessionInfo(): array
     {
-        try {
-            // 通过简单的API调用来刷新会话
-            $this->transport->request('GET', '/api/v2/app/version');
-            return true;
-        } catch (ClientException $e) {
-            return false;
-        }
-    }
-
-    /**
-     * 获取当前登录用户信息（如果qBittorrent支持）
-     *
-     * 注意：标准的qBittorrent API不提供用户信息
-     * 这个方法适用于某些修改版本或未来版本
-     *
-     * @return array 用户信息
-     */
-    public function getCurrentUser(): array
-    {
-        try {
-            return $this->transport->request('GET', '/api/v2/auth/user');
-        } catch (ClientException $e) {
-            // 如果API不存在，返回基本信息
-            return [
-                'authenticated' => $this->isLoggedIn(),
-                'cookie_set' => $this->getAuthCookie() !== null
-            ];
-        }
-    }
-
-    /**
-     * 测试连接到qBittorrent服务器
-     *
-     * @return bool 是否可以连接
-     */
-    public function testConnection(): bool
-    {
-        try {
-            $this->transport->request('GET', '/api/v2/app/webapiVersion');
-            return true;
-        } catch (ClientException $e) {
-            return false;
-        }
-    }
-
-    /**
-     * 获取服务器支持的方法列表
-     *
-     * @return array 支持的API端点
-     */
-    public function getSupportedMethods(): array
-    {
-        $standardEndpoints = [
-            'login' => 'POST /api/v2/auth/login',
-            'logout' => 'POST /api/v2/auth/logout',
-            'application_version' => 'GET /api/v2/app/version',
-            'webapi_version' => 'GET /api/v2/app/webapiVersion',
-            'torrents_info' => 'GET /api/v2/torrents/info',
-            'torrents_add' => 'POST /api/v2/torrents/add',
-            'transfer_info' => 'GET /api/v2/transfer/info',
+        return [
+            'session_id' => $this->currentSessionId,
+            'username' => $this->currentUsername,
+            'expires_at' => $this->sessionExpiresAt,
+            'is_logged_in' => $this->isLoggedIn(),
+            'remaining_time' => $this->getRemainingSessionTime(),
         ];
+    }
 
-        // 检查哪些端点是实际可用的
-        $supported = [];
-        $originalAuth = $this->getAuthCookie();
+    /**
+     * 获取剩余会话时间
+     *
+     * @return int|null 剩余时间（秒）
+     */
+    public function getRemainingSessionTime(): ?int
+    {
+        if ($this->sessionExpiresAt === null) {
+            return null;
+        }
 
-        foreach ($standardEndpoints as $method => $endpoint) {
-            try {
-                // 对于需要认证的端点，跳过检查
-                if (in_array($method, ['torrents_info', 'torrents_add', 'transfer_info'])) {
-                    continue;
-                }
+        $remaining = $this->sessionExpiresAt - time();
+        return max(0, $remaining);
+    }
 
-                $this->transport->request($method, $endpoint);
-                $supported[$method] = $endpoint;
-            } catch (ClientException $e) {
-                // 端点不可用
+    /**
+     * 检查会话是否过期
+     *
+     * @return bool 是否过期
+     */
+    public function isSessionExpired(): bool
+    {
+        if ($this->sessionExpiresAt === null) {
+            return false;
+        }
+
+        return time() > $this->sessionExpiresAt;
+    }
+
+    /**
+     * 清除本地会话状态
+     *
+     * @return void
+     */
+    public function clearLocalSession(): void
+    {
+        $this->currentSessionId = null;
+        $this->currentUsername = null;
+        $this->sessionExpiresAt = null;
+    }
+
+    /**
+     * 处理登录响应
+     *
+     * @param TransportResponse $transportResponse 传输响应
+     * @param LoginRequest $request 登录请求
+     * @return LoginResponse 登录响应
+     */
+    private function handleLoginResponse(TransportResponse $transportResponse, LoginRequest $request): LoginResponse
+    {
+        $statusCode = $transportResponse->getStatusCode();
+        $headers = $transportResponse->getHeaders();
+        $rawResponse = $transportResponse->getBody();
+
+        if ($statusCode === 200) {
+            // 登录成功
+            $sessionId = $this->extractSessionId($headers);
+            if ($sessionId === null) {
+                return LoginResponse::failure(
+                    ['无法从响应中提取会话ID'],
+                    $headers,
+                    $statusCode,
+                    $rawResponse
+                );
+            }
+
+            // 更新本地会话状态
+            $this->currentSessionId = $sessionId;
+            $this->currentUsername = $request->getUsername();
+            // 设置默认的会话过期时间（24小时）
+            $this->sessionExpiresAt = time() + 86400;
+
+            // 创建用户信息
+            $userInfo = [
+                'username' => $request->getUsername(),
+                'login_time' => time(),
+                'login_method' => 'password',
+            ];
+
+            return LoginResponse::success(
+                $sessionId,
+                $headers,
+                $statusCode,
+                $rawResponse,
+                $userInfo
+            );
+
+        } elseif ($statusCode === 403) {
+            // IP被禁止
+            return LoginResponse::failure(
+                ['用户IP因登录失败次数过多而被禁止访问'],
+                $headers,
+                $statusCode,
+                $rawResponse
+            );
+
+        } elseif ($statusCode === 401) {
+            // 认证失败
+            return LoginResponse::failure(
+                ['用户名或密码错误'],
+                $headers,
+                $statusCode,
+                $rawResponse
+            );
+
+        } else {
+            // 其他错误
+            return LoginResponse::failure(
+                ["登录失败，状态码: {$statusCode}"],
+                $headers,
+                $statusCode,
+                $rawResponse
+            );
+        }
+    }
+
+    /**
+     * 处理登出响应
+     *
+     * @param TransportResponse $transportResponse 传输响应
+     * @param LogoutRequest $request 登出请求
+     * @return LogoutResponse 登出响应
+     */
+    private function handleLogoutResponse(TransportResponse $transportResponse, LogoutRequest $request): LogoutResponse
+    {
+        $statusCode = $transportResponse->getStatusCode();
+        $headers = $transportResponse->getHeaders();
+        $rawResponse = $transportResponse->getBody();
+
+        if ($statusCode === 200) {
+            // 登出成功，清除本地会话状态
+            $this->clearLocalSession();
+
+            return LogoutResponse::success(
+                $headers,
+                $statusCode,
+                $rawResponse,
+                true, // sessionCleared
+                $request->shouldClearAllSessions()
+            );
+
+        } else {
+            // 登出失败
+            return LogoutResponse::failure(
+                ["登出失败，状态码: {$statusCode}"],
+                $headers,
+                $statusCode,
+                $rawResponse
+            );
+        }
+    }
+
+    /**
+     * 从响应头中提取会话ID
+     *
+     * @param array<string, string> $headers 响应头
+     * @return string|null 会话ID
+     */
+    private function extractSessionId(array $headers): ?string
+    {
+        if (isset($headers['Set-Cookie'])) {
+            // 匹配SID=后面的内容，直到分号或字符串结束
+            if (preg_match('/SID=([^;]+)/', $headers['Set-Cookie'], $matches)) {
+                return trim($matches[1]);
             }
         }
 
-        $this->setAuthCookie($originalAuth);
+        return null;
+    }
 
-        return $supported;
+    /**
+     * 创建通用响应对象
+     *
+     * @param TransportResponse $transportResponse 传输响应
+     * @return \PhpQbittorrent\Contract\ResponseInterface 响应对象
+     */
+    private function createGenericResponse(TransportResponse $transportResponse): \PhpQbittorrent\Contract\ResponseInterface
+    {
+        // 这里可以创建一个通用的响应对象
+        // 为了简化，我们创建一个简单的响应数组
+        return new class($transportResponse) implements \PhpQbittorrent\Contract\ResponseInterface {
+            private TransportResponse $response;
+            private array $data;
+
+            public function __construct(TransportResponse $response)
+            {
+                $this->response = $response;
+                $this->data = $response->getJson() ?? [];
+            }
+
+            public static function fromArray(array $data): static
+            {
+                // 实现逻辑
+                return new self(new class($data) implements TransportResponse {
+                    private array $data;
+                    public function __construct(array $data) { $this->data = $data; }
+                    public function getStatusCode(): int { return 200; }
+                    public function getHeaders(): array { return []; }
+                    public function getBody(): string { return ''; }
+                    public function getJson(): ?array { return $this->data; }
+                    public function isSuccess(int ...$acceptableCodes): bool { return true; }
+                    public function isJson(): bool { return true; }
+                    public function getHeader(string $name): ?string { return null; }
+                });
+            }
+
+            public function isSuccess(): bool { return $this->response->isSuccess(); }
+            public function getErrors(): array { return []; }
+            public function getData(): mixed { return $this->data; }
+            public function getStatusCode(): int { return $this->response->getStatusCode(); }
+            public function getHeaders(): array { return $this->response->getHeaders(); }
+            public function getRawResponse(): string { return $this->response->getBody(); }
+            public function toArray(): array { return $this->data; }
+            public function jsonSerialize(): array { return $this->data; }
+        };
     }
 }

@@ -1,11 +1,11 @@
 <?php
 declare(strict_types=1);
 
-namespace Dongasai\qBittorrent\Response;
+namespace PhpQbittorrent\Response;
 
-use Dongasai\qBittorrent\Contract\ResponseInterface as ResponseContract;
-use Dongasai\qBittorrent\Validation\BasicValidationResult;
-use Dongasai\qBittorrent\Contract\ValidationResult;
+use PhpQbittorrent\Contract\ResponseInterface as ResponseContract;
+use PhpQbittorrent\Validation\BasicValidationResult;
+use PhpQbittorrent\Contract\ValidationResult;
 
 /**
  * 抽象响应基类

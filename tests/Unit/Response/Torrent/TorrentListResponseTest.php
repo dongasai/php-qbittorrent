@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace PhpQbittorrent\Tests\Unit\Response\Torrent;
 
 use PhpQbittorrent\Collection\TorrentCollection;
-use PhpQbittorrent\Model\TorrentInfoV2;
+use PhpQbittorrent\Model\TorrentInfo;
 use PhpQbittorrent\Response\Torrent\TorrentListResponse;
 use PhpQbittorrent\Tests\TestCase;
 

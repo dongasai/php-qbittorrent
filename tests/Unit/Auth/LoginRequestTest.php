@@ -4,8 +4,8 @@ declare(strict_types=1);
 namespace Tests\Unit\Auth;
 
 use PHPUnit\Framework\TestCase;
-use Dongasai\qBittorrent\Request\Auth\LoginRequest;
-use Dongasai\qBittorrent\Exception\ValidationException;
+use PhpQbittorrent\Request\Auth\LoginRequest;
+use PhpQbittorrent\Exception\ValidationException;
 
 /**
  * 登录请求单元测试

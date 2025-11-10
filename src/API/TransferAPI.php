@@ -3,434 +3,374 @@ declare(strict_types=1);
 
 namespace PhpQbittorrent\API;
 
-use PhpQbittorrent\Transport\TransportInterface;
-use PhpQbittorrent\Exception\ClientException;
+use PhpQbittorrent\Contract\ApiInterface;
+use PhpQbittorrent\Contract\TransportInterface;
+use PhpQbittorrent\Request\Transfer\GetGlobalTransferInfoRequest;
+use PhpQbittorrent\Request\Transfer\GetAlternativeSpeedLimitsStateRequest;
+use PhpQbittorrent\Request\Transfer\ToggleAlternativeSpeedLimitsRequest;
+use PhpQbittorrent\Response\Transfer\GlobalTransferInfoResponse;
+use PhpQbittorrent\Response\Transfer\AlternativeSpeedLimitsStateResponse;
+use PhpQbittorrent\Exception\NetworkException;
+use PhpQbittorrent\Exception\ApiRuntimeException;
+use PhpQbittorrent\Exception\ValidationException;
 
 /**
- * 传输API类
+ * Transfer API 参数对象化
  *
- * 处理qBittorrent传输相关的API操作，包括下载速度、上传速度、传输统计等
+ * 提供传输管理相关的API功能
  */
-final class TransferAPI
+class TransferAPI implements ApiInterface
 {
+    /** @var TransportInterface 传输层实例 */
     private TransportInterface $transport;
 
+    /**
+     * 构造函数
+     *
+     * @param TransportInterface $transport 传输层实例
+     */
     public function __construct(TransportInterface $transport)
     {
         $this->transport = $transport;
     }
 
     /**
+     * 获取API的基础路径
+     *
+     * @return string API基础路径
+     */
+    public function getBasePath(): string
+    {
+        return '/api/v2/transfer';
+    }
+
+    /**
+     * 获取传输层实例
+     *
+     * @return TransportInterface 传输层实例
+     */
+    public function getTransport(): TransportInterface
+    {
+        return $this->transport;
+    }
+
+    /**
+     * 设置传输层实例
+     *
+     * @param TransportInterface $transport 传输层实例
+     * @return static 返回自身以支持链式调用
+     */
+    public function setTransport(TransportInterface $transport): static
+    {
+        $this->transport = $transport;
+        return $this;
+    }
+
+    /**
+     * 执行GET请求
+     *
+     * @param string $endpoint API端点
+     * @param array<string, mixed> $parameters 请求参数
+     * @param array<string, string> $headers 请求头
+     * @return \PhpQbittorrent\Contract\ResponseInterface 响应对象
+     */
+    public function get(string $endpoint, array $parameters = [], array $headers = []): \PhpQbittorrent\Contract\ResponseInterface
+    {
+        $url = $this->getBasePath() . $endpoint;
+        $transportResponse = $this->transport->get($url, $parameters, $headers);
+        return $this->createGenericResponse($transportResponse);
+    }
+
+    /**
+     * 执行POST请求
+     *
+     * @param string $endpoint API端点
+     * @param array<string, mixed> $data 请求数据
+     * @param array<string, string> $headers 请求头
+     * @return \PhpQbittorrent\Contract\ResponseInterface 响应对象
+     */
+    public function post(string $endpoint, array $data = [], array $headers = []): \PhpQbittorrent\Contract\ResponseInterface
+    {
+        $url = $this->getBasePath() . $endpoint;
+        $transportResponse = $this->transport->post($url, $data, $headers);
+        return $this->createGenericResponse($transportResponse);
+    }
+
+    /**
      * 获取全局传输信息
      *
-     * @return array 传输信息
-     * @throws ClientException 获取失败
+     * @param GetGlobalTransferInfoRequest $request 获取全局传输信息请求
+     * @return GlobalTransferInfoResponse 全局传输信息响应
+     * @throws NetworkException 网络异常
+     * @throws ValidationException 验证异常
+     * @throws ApiRuntimeException API运行时异常
      */
-    public function getTransferInfo(): array
+    public function getGlobalTransferInfo(GetGlobalTransferInfoRequest $request): GlobalTransferInfoResponse
     {
-        return $this->transport->request('GET', '/api/v2/transfer/info');
-    }
+        // 验证请求
+        $validation = $request->validate();
+        if (!$validation->isValid()) {
+            throw ValidationException::fromValidationResult(
+                $validation,
+                'GetGlobalTransferInfo request validation failed'
+            );
+        }
 
-    /**
-     * 获取下载速度统计
-     *
-     * @return array 下载速度信息
-     * @throws ClientException 获取失败
-     */
-    public function getDownloadSpeedStats(): array
-    {
-        $transferInfo = $this->getTransferInfo();
-
-        return [
-            'dl_info_speed' => (int) ($transferInfo['dl_info_speed'] ?? 0),
-            'dl_info_data' => (int) ($transferInfo['dl_info_data'] ?? 0),
-            'dl_rate_limit' => (int) ($transferInfo['dl_rate_limit'] ?? 0),
-        ];
-    }
-
-    /**
-     * 获取上传速度统计
-     *
-     * @return array 上传速度信息
-     * @throws ClientException 获取失败
-     */
-    public function getUploadSpeedStats(): array
-    {
-        $transferInfo = $this->getTransferInfo();
-
-        return [
-            'up_info_speed' => (int) ($transferInfo['up_info_speed'] ?? 0),
-            'up_info_data' => (int) ($transferInfo['up_info_data'] ?? 0),
-            'up_rate_limit' => (int) ($transferInfo['up_rate_limit'] ?? 0),
-        ];
-    }
-
-    /**
-     * 获取连接信息
-     *
-     * @return array 连接信息
-     * @throws ClientException 获取失败
-     */
-    public function getConnectionInfo(): array
-    {
-        $transferInfo = $this->getTransferInfo();
-
-        return [
-            'connection_status' => $transferInfo['connection_status'] ?? 'disconnected',
-            'dht_nodes' => (int) ($transferInfo['dht_nodes'] ?? 0),
-            'dl_info_speed' => (int) ($transferInfo['dl_info_speed'] ?? 0),
-            'up_info_speed' => (int) ($transferInfo['up_info_speed'] ?? 0),
-        ];
-    }
-
-    /**
-     * 设置全局下载速度限制
-     *
-     * @param int $limit 下载速度限制（字节/秒），0表示无限制
-     * @return bool 设置是否成功
-     * @throws ClientException 设置失败
-     */
-    public function setDownloadSpeedLimit(int $limit): bool
-    {
         try {
-            $this->transport->request('POST', '/api/v2/transfer/setDownloadLimit', [
-                'form_params' => ['limit' => $limit]
-            ]);
-            return true;
-        } catch (ClientException $e) {
-            return false;
+            // 发送请求
+            $url = $this->getBasePath() . $request->getEndpoint();
+            $transportResponse = $this->transport->get(
+                $url,
+                $request->toArray(),
+                $request->getHeaders()
+            );
+
+            // 处理响应
+            return $this->handleGlobalTransferInfoResponse($transportResponse, $request);
+
+        } catch (NetworkException $e) {
+            throw new ApiRuntimeException(
+                'Get global transfer info failed due to network error: ' . $e->getMessage(),
+                'GET_GLOBAL_TRANSFER_INFO_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url,
+                'GET',
+                $transportResponse->getStatusCode() ?? null,
+                ['request_summary' => $request->getSummary()],
+                $e
+            );
         }
     }
 
     /**
-     * 设置全局上传速度限制
+     * 获取传输信息（别名方法）
      *
-     * @param int $limit 上传速度限制（字节/秒），0表示无限制
-     * @return bool 设置是否成功
-     * @throws ClientException 设置失败
+     * @return GlobalTransferInfoResponse 全局传输信息响应
+     * @throws NetworkException 网络异常
+     * @throws ValidationException 验证异常
+     * @throws ApiRuntimeException API运行时异常
      */
-    public function setUploadSpeedLimit(int $limit): bool
+    public function getTransferInfo(): GlobalTransferInfoResponse
     {
-        try {
-            $this->transport->request('POST', '/api/v2/transfer/setUploadLimit', [
-                'form_params' => ['limit' => $limit]
-            ]);
-            return true;
-        } catch (ClientException $e) {
-            return false;
-        }
-    }
-
-    /**
-     * 设置同时的下载限制
-     *
-     * @param int $limit 同时下载数量限制
-     * @return bool 设置是否成功
-     * @throws ClientException 设置失败
-     */
-    public function setMaxDownloadingSlots(int $limit): bool
-    {
-        try {
-            $this->transport->request('POST', '/api/v2/transfer/setDownloadLimit', [
-                'form_params' => ['limit' => $limit]
-            ]);
-            return true;
-        } catch (ClientException $e) {
-            return false;
-        }
-    }
-
-    /**
-     * 设置同时的上传限制
-     *
-     * @param int $limit 同时上传数量限制
-     * @return bool 设置是否成功
-     * @throws ClientException 设置失败
-     */
-    public function setMaxUploadingSlots(int $limit): bool
-    {
-        try {
-            $this->transport->request('POST', '/api/v2/transfer/setUploadLimit', [
-                'form_params' => ['limit' => $limit]
-            ]);
-            return true;
-        } catch (ClientException $e) {
-            return false;
-        }
-    }
-
-    /**
-     * 获取当前的速度限制
-     *
-     * @return array 速度限制信息
-     * @throws ClientException 获取失败
-     */
-    public function getCurrentSpeedLimits(): array
-    {
-        $transferInfo = $this->getTransferInfo();
-
-        return [
-            'dl_rate_limit' => (int) ($transferInfo['dl_rate_limit'] ?? 0),
-            'up_rate_limit' => (int) ($transferInfo['up_rate_limit'] ?? 0),
-        ];
-    }
-
-    /**
-     * 限制上传速度
-     *
-     * @param int $limit 上传速度限制（字节/秒）
-     * @return bool 设置是否成功
-     */
-    public function limitUploadSpeed(int $limit): bool
-    {
-        return $this->setUploadSpeedLimit($limit);
-    }
-
-    /**
-     * 限制下载速度
-     *
-     * @param int $limit 下载速度限制（字节/秒）
-     * @return bool 设置是否成功
-     */
-    public function limitDownloadSpeed(int $limit): bool
-    {
-        return $this->setDownloadSpeedLimit($limit);
-    }
-
-    /**
-     * 暂停所有下载
-     *
-     * @return bool 操作是否成功
-     */
-    public function pauseAllDownloads(): bool
-    {
-        try {
-            $this->transport->request('POST', '/api/v2/torrents/stop', [
-                'form_params' => ['hashes' => 'all']
-            ]);
-            return true;
-        } catch (ClientException $e) {
-            return false;
-        }
-    }
-
-    /**
-     * 恢复所有下载
-     *
-     * @return bool 操作是否成功
-     */
-    public function resumeAllDownloads(): bool
-    {
-        try {
-            $this->transport->request('POST', '/api/v2/torrents/start', [
-                'form_params' => ['hashes' => 'all']
-            ]);
-            return true;
-        } catch (ClientException $e) {
-            return false;
-        }
-    }
-
-    /**
-     * 切换替代速度限制（替代速度限制通常用于节能模式）
-     *
-     * @param bool $enabled 是否启用替代速度限制
-     * @return bool 操作是否成功
-     */
-    public function toggleAlternativeSpeedLimits(bool $enabled): bool
-    {
-        try {
-            $endpoint = $enabled ? '/api/v2/transfer/speedLimitsMode' : '/api/v2/transfer/toggleSpeedLimitsMode';
-            $this->transport->request('POST', $endpoint);
-            return true;
-        } catch (ClientException $e) {
-            return false;
-        }
+        return $this->getGlobalTransferInfo(\PhpQbittorrent\Request\Transfer\GetGlobalTransferInfoRequest::create());
     }
 
     /**
      * 获取替代速度限制状态
      *
-     * @return bool 替代速度限制是否启用
+     * @param GetAlternativeSpeedLimitsStateRequest $request 获取替代速度限制状态请求
+     * @return AlternativeSpeedLimitsStateResponse 替代速度限制状态响应
+     * @throws NetworkException 网络异常
+     * @throws ValidationException 验证异常
+     * @throws ApiRuntimeException API运行时异常
      */
-    public function isAlternativeSpeedLimitsEnabled(): bool
+    public function getAlternativeSpeedLimitsState(GetAlternativeSpeedLimitsStateRequest $request): AlternativeSpeedLimitsStateResponse
     {
+        // 验证请求
+        $validation = $request->validate();
+        if (!$validation->isValid()) {
+            throw ValidationException::fromValidationResult(
+                $validation,
+                'GetAlternativeSpeedLimitsState request validation failed'
+            );
+        }
+
         try {
-            $response = $this->transport->request('GET', '/api/v2/transfer/speedLimitsMode');
-            return (bool) ($response[0] ?? false);
-        } catch (ClientException $e) {
-            return false;
+            // 发送请求
+            $url = $this->getBasePath() . $request->getEndpoint();
+            $transportResponse = $this->transport->get(
+                $url,
+                $request->toArray(),
+                $request->getHeaders()
+            );
+
+            // 处理响应
+            return $this->handleAlternativeSpeedLimitsStateResponse($transportResponse, $request);
+
+        } catch (NetworkException $e) {
+            throw new ApiRuntimeException(
+                'Get alternative speed limits state failed due to network error: ' . $e->getMessage(),
+                'GET_ALTERNATIVE_SPEED_LIMITS_STATE_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url,
+                'GET',
+                $transportResponse->getStatusCode() ?? null,
+                ['request_summary' => $request->getSummary()],
+                $e
+            );
         }
     }
 
     /**
-     * 设置连接限制
+     * 切换替代速度限制
      *
-     * @param int $maxConnections 最大连接数
-     * @param int $maxConnectionsPerTorrent 每个torrent的最大连接数
-     * @return bool 设置是否成功
+     * @param ToggleAlternativeSpeedLimitsRequest $request 切换替代速度限制请求
+     * @return AlternativeSpeedLimitsStateResponse 切换后的状态响应
+     * @throws NetworkException 网络异常
+     * @throws ValidationException 验证异常
+     * @throws ApiRuntimeException API运行时异常
      */
-    public function setConnectionLimits(int $maxConnections, int $maxConnectionsPerTorrent): bool
+    public function toggleAlternativeSpeedLimits(ToggleAlternativeSpeedLimitsRequest $request): AlternativeSpeedLimitsStateResponse
     {
+        // 验证请求
+        $validation = $request->validate();
+        if (!$validation->isValid()) {
+            throw ValidationException::fromValidationResult(
+                $validation,
+                'ToggleAlternativeSpeedLimits request validation failed'
+            );
+        }
+
         try {
-            // 通过设置preferences来调整连接限制
-            $this->transport->request('POST', '/api/v2/app/setPreferences', [
-                'json' => [
-                    'json' => json_encode([
-                        'max_connec' => $maxConnections,
-                        'max_connec_per_torrent' => $maxConnectionsPerTorrent
-                    ], JSON_UNESCAPED_UNICODE)
-                ]
-            ]);
-            return true;
-        } catch (ClientException $e) {
-            return false;
+            // 发送请求
+            $url = $this->getBasePath() . $request->getEndpoint();
+            $transportResponse = $this->transport->get(
+                $url,
+                $request->toArray(),
+                $request->getHeaders()
+            );
+
+            // 处理响应
+            return $this->handleAlternativeSpeedLimitsStateResponse($transportResponse, $request);
+
+        } catch (NetworkException $e) {
+            throw new ApiRuntimeException(
+                'Toggle alternative speed limits failed due to network error: ' . $e->getMessage(),
+                'TOGGLE_ALTERNATIVE_SPEED_LIMITS_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url,
+                'GET',
+                $transportResponse->getStatusCode() ?? null,
+                ['request_summary' => $request->getSummary()],
+                $e
+            );
         }
     }
 
     /**
-     * 获取实时传输统计（可能需要轮询）
+     * 处理全局传输信息响应
      *
-     * @return array 实时传输统计
+     * @param \PhpQbittorrent\Contract\TransportResponse $transportResponse 传输响应
+     * @param GetGlobalTransferInfoRequest $request 请求对象
+     * @return GlobalTransferInfoResponse 全局传输信息响应
      */
-    public function getRealtimeStats(): array
-    {
-        $transferInfo = $this->getTransferInfo();
+    private function handleGlobalTransferInfoResponse(
+        \PhpQbittorrent\Contract\TransportResponse $transportResponse,
+        GetGlobalTransferInfoRequest $request
+    ): GlobalTransferInfoResponse {
+        $statusCode = $transportResponse->getStatusCode();
+        $headers = $transportResponse->getHeaders();
+        $rawResponse = $transportResponse->getBody();
 
-        return [
-            'timestamp' => time(),
-            'download_speed' => (int) ($transferInfo['dl_info_speed'] ?? 0),
-            'upload_speed' => (int) ($transferInfo['up_info_speed'] ?? 0),
-            'total_downloaded' => (int) ($transferInfo['dl_info_data'] ?? 0),
-            'total_uploaded' => (int) ($transferInfo['up_info_data'] ?? 0),
-            'dht_nodes' => (int) ($transferInfo['dht_nodes'] ?? 0),
-            'connection_status' => $transferInfo['connection_status'] ?? 'disconnected',
-        ];
+        if ($statusCode === 200) {
+            try {
+                $transferInfo = $transportResponse->getJson() ?? [];
+                return GlobalTransferInfoResponse::fromApiResponse($transferInfo, $headers, $statusCode, $rawResponse);
+            } catch (\Exception $e) {
+                return GlobalTransferInfoResponse::failure(
+                    ['响应解析失败: ' . $e->getMessage()],
+                    $headers,
+                    $statusCode,
+                    $rawResponse
+                );
+            }
+        } else {
+            return GlobalTransferInfoResponse::failure(
+                ["获取全局传输信息失败，状态码: {$statusCode}"],
+                $headers,
+                $statusCode,
+                $rawResponse
+            );
+        }
     }
 
     /**
-     * 获取传输历史摘要
+     * 处理替代速度限制状态响应
      *
-     * @return array 传输历史摘要
+     * @param \PhpQbittorrent\Contract\TransportResponse $transportResponse 传输响应
+     * @param GetAlternativeSpeedLimitsStateRequest|ToggleAlternativeSpeedLimitsRequest $request 请求对象
+     * @return AlternativeSpeedLimitsStateResponse 替代速度限制状态响应
      */
-    public function getTransferSummary(): array
-    {
-        $stats = $this->getRealtimeStats();
+    private function handleAlternativeSpeedLimitsStateResponse(
+        \PhpQbittorrent\Contract\TransportResponse $transportResponse,
+        GetAlternativeSpeedLimitsStateRequest|ToggleAlternativeSpeedLimitsRequest $request
+    ): AlternativeSpeedLimitsStateResponse {
+        $statusCode = $transportResponse->getStatusCode();
+        $headers = $transportResponse->getHeaders();
+        $rawResponse = $transportResponse->getBody();
 
-        return [
-            'current_download_speed' => $this->formatBytes($stats['download_speed']) . '/s',
-            'current_upload_speed' => $this->formatBytes($stats['upload_speed']) . '/s',
-            'total_downloaded' => $this->formatBytes($stats['total_downloaded']),
-            'total_uploaded' => $this->formatBytes($stats['total_uploaded']),
-            'active_connections' => $stats['dht_nodes'],
-            'connection_status' => $stats['connection_status'],
-            'last_updated' => date('Y-m-d H:i:s', $stats['timestamp']),
-        ];
+        if ($statusCode === 200) {
+            try {
+                // API返回的是字符串 "0" 或 "1"
+                $state = $transportResponse->getBody();
+                return AlternativeSpeedLimitsStateResponse::fromApiResponse($state, $headers, $statusCode, $rawResponse);
+            } catch (\Exception $e) {
+                return AlternativeSpeedLimitsStateResponse::failure(
+                    ['响应解析失败: ' . $e->getMessage()],
+                    $headers,
+                    $statusCode,
+                    $rawResponse
+                );
+            }
+        } else {
+            return AlternativeSpeedLimitsStateResponse::failure(
+                ["获取替代速度限制状态失败，状态码: {$statusCode}"],
+                $headers,
+                $statusCode,
+                $rawResponse
+            );
+        }
     }
 
     /**
-     * 检查传输系统是否健康
+     * 创建通用响应对象
      *
-     * @return array 健康状态信息
+     * @param \PhpQbittorrent\Contract\TransportResponse $transportResponse 传输响应
+     * @param array<string, mixed> $additionalData 额外数据
+     * @return \PhpQbittorrent\Contract\ResponseInterface 响应对象
      */
-    public function getHealthStatus(): array
-    {
-        try {
-            $transferInfo = $this->getTransferInfo();
+    private function createGenericResponse(
+        \PhpQbittorrent\Contract\TransportResponse $transportResponse,
+        array $additionalData = []
+    ): \PhpQbittorrent\Contract\ResponseInterface {
+        // 这里可以创建一个通用的响应对象
+        // 为了简化，我们创建一个简单的响应数组
+        return new class($transportResponse, $additionalData) implements \PhpQbittorrent\Contract\ResponseInterface {
+            private \PhpQbittorrent\Contract\TransportResponse $response;
+            private array $data;
+            private array $additionalData;
 
-            $status = [
-                'healthy' => true,
-                'issues' => [],
-                'connection_status' => $transferInfo['connection_status'] ?? 'disconnected',
-                'dht_nodes' => (int) ($transferInfo['dht_nodes'] ?? 0),
-            ];
-
-            // 检查连接状态
-            if ($status['connection_status'] !== 'connected') {
-                $status['healthy'] = false;
-                $status['issues'][] = '连接状态异常：' . $status['connection_status'];
+            public function __construct(
+                \PhpQbittorrent\Contract\TransportResponse $response,
+                array $additionalData = []
+            ) {
+                $this->response = $response;
+                $this->data = $response->getJson() ?? [];
+                $this->additionalData = $additionalData;
             }
 
-            // 检查DHT节点
-            if ($status['dht_nodes'] === 0) {
-                $status['issues'][] = 'DHT节点数为0，可能影响发现能力';
+            public static function fromArray(array $data): static {
+                return new self(new class($data) implements \PhpQbittorrent\Contract\TransportResponse {
+                    private array $data;
+                    public function __construct(array $data) { $this->data = $data; }
+                    public function getStatusCode(): int { return $this->data['status_code'] ?? 200; }
+                    public function getHeaders(): array { return $this->data['headers'] ?? []; }
+                    public function getBody(): string { return $this->data['body'] ?? ''; }
+                    public function getJson(): ?array { return $this->data['json'] ?? null; }
+                    public function isSuccess(int ...$acceptableCodes): bool { return true; }
+                    public function isJson(): bool { return true; }
+                    public function getHeader(string $name): ?string { return null; }
+                }, $additionalData);
             }
 
-            return $status;
-
-        } catch (ClientException $e) {
-            return [
-                'healthy' => false,
-                'issues' => ['无法获取传输信息：' . $e->getMessage()],
-                'connection_status' => 'error',
-                'dht_nodes' => 0,
-            ];
-        }
-    }
-
-    /**
-     * 获取下载速度限制
-     *
-     * @return int 下载速度限制（字节/秒），-1表示无限制
-     * @throws ClientException 获取失败
-     */
-    public function getDownloadLimit(): int
-    {
-        $preferences = $this->transport->request('GET', '/api/v2/app/preferences');
-        return (int) ($preferences['dl_limit'] ?? -1);
-    }
-
-    /**
-     * 获取上传速度限制
-     *
-     * @return int 上传速度限制（字节/秒），-1表示无限制
-     * @throws ClientException 获取失败
-     */
-    public function getUploadLimit(): int
-    {
-        $preferences = $this->transport->request('GET', '/api/v2/app/preferences');
-        return (int) ($preferences['up_limit'] ?? -1);
-    }
-
-    /**
-     * 封禁指定的peers
-     *
-     * @param string $hash Torrent hash
-     * @param array $peers 要封禁的peer列表，格式：['ip:port', 'ip:port', ...]
-     * @return bool 操作是否成功
-     * @throws ClientException 操作失败
-     */
-    public function banPeers(string $hash, array $peers): bool
-    {
-        if (empty($peers)) {
-            return false;
-        }
-
-        $this->transport->request('POST', '/api/v2/torrents/banPeers', [
-            'form_params' => [
-                'hash' => $hash,
-                'peers' => implode('|', $peers)
-            ]
-        ]);
-
-        return true;
-    }
-
-    /**
-     * 格式化字节数为可读格式
-     *
-     * @param int $bytes 字节数
-     * @param int $precision 精度
-     * @return string 格式化后的字符串
-     */
-    private function formatBytes(int $bytes, int $precision = 2): string
-    {
-        $units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
-        $bytes = max($bytes, 0);
-        $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
-        $pow = min($pow, count($units) - 1);
-        $bytes /= (1 << (10 * $pow));
-
-        return round($bytes, $precision) . ' ' . $units[$pow];
+            public function isSuccess(): bool { return $this->response->isSuccess(); }
+            public function getErrors(): array { return $this->additionalData['errors'] ?? []; }
+            public function getData(): mixed { return array_merge($this->data, $this->additionalData); }
+            public function getStatusCode(): int { return $this->response->getStatusCode(); }
+            public function getHeaders(): array { return $this->response->getHeaders(); }
+            public function getRawResponse(): string { return $this->response->getBody(); }
+            public function toArray(): array { return array_merge($this->data, $this->additionalData); }
+            public function jsonSerialize(): array { return $this->toArray(); }
+        };
     }
 }

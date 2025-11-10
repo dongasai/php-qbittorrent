@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Auth;
 
 use PHPUnit\Framework\TestCase;
-use Dongasai\qBittorrent\Response\Auth\LoginResponse;
+use PhpQbittorrent\Response\Auth\LoginResponse;
 
 /**
  * 登录响应单元测试

@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Dongasai\qBittorrent\Enum;
+namespace PhpQbittorrent\Enum;
 
 /**
  * 代理类型枚举

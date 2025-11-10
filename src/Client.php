@@ -3,151 +3,205 @@ declare(strict_types=1);
 
 namespace PhpQbittorrent;
 
-use PhpQbittorrent\Config\ClientConfig;
-use PhpQbittorrent\Transport\TransportInterface;
-use PhpQbittorrent\Transport\CurlTransport;
-use PhpQbittorrent\API\AuthAPI;
-use PhpQbittorrent\API\TorrentAPI;
 use PhpQbittorrent\API\ApplicationAPI;
 use PhpQbittorrent\API\TransferAPI;
+use PhpQbittorrent\API\TorrentAPI;
 use PhpQbittorrent\API\RSSAPI;
 use PhpQbittorrent\API\SearchAPI;
-use PhpQbittorrent\Exception\{
-    ClientException,
-    AuthenticationException,
-    ValidationException,
-    NetworkException
-};
+use PhpQbittorrent\Contract\TransportInterface;
+use PhpQbittorrent\Transport\CurlTransport;
+use Nyholm\Psr7\Factory\Psr17Factory;
+use PhpQbittorrent\Exception\AuthenticationException;
+use PhpQbittorrent\Exception\NetworkException;
+use PhpQbittorrent\Exception\ValidationException;
 
 /**
- * qBittorrent客户端主类
+ * qBittorrent客户端 参数对象化
  *
- * 提供完整的qBittorrent Web API访问功能，兼容qBittorrent 5.x版本
+ * 提供统一的API访问接口，整合所有v2 API模块
  */
-final class Client
+class Client
 {
-    private ClientConfig $config;
+    /** @var TransportInterface 传输层实例 */
     private TransportInterface $transport;
-    private ?AuthAPI $authAPI = null;
-    private ?TorrentAPI $torrentAPI = null;
+
+    /** @var string qBittorrent服务器地址 */
+    private string $baseUrl;
+
+    /** @var string 用户名 */
+    private string $username;
+
+    /** @var string 密码 */
+    private string $password;
+
+    /** @var bool 是否已认证 */
+    private bool $authenticated = false;
+
+    /** @var ApplicationAPI|null 应用API实例 */
     private ?ApplicationAPI $applicationAPI = null;
+
+    /** @var TransferAPI|null 传输API实例 */
     private ?TransferAPI $transferAPI = null;
+
+    /** @var TorrentAPI|null 种子API实例 */
+    private ?TorrentAPI $torrentAPI = null;
+
+    /** @var RSSAPI|null RSS API实例 */
     private ?RSSAPI $rssAPI = null;
+
+    /** @var SearchAPI|null 搜索API实例 */
     private ?SearchAPI $searchAPI = null;
-    private bool $isLoggedIn = false;
 
     /**
-     * 创建客户端实例
+     * 构造函数
      *
-     * @param ClientConfig $config 客户端配置
-     * @param TransportInterface|null $transport 自定义传输层
-     * @throws ValidationException 配置验证失败
+     * @param string $baseUrl qBittorrent服务器地址
+     * @param string $username 用户名
+     * @param string $password 密码
+     * @param TransportInterface|null $transport 自定义传输层实例
+     * @throws ValidationException 配置异常
      */
-    public function __construct(ClientConfig $config, ?TransportInterface $transport = null)
+    public function __construct(
+        string $baseUrl,
+        string $username,
+        string $password,
+        ?TransportInterface $transport = null
+    ) {
+        $this->validateConfiguration($baseUrl, $username, $password);
+
+        $this->baseUrl = rtrim($baseUrl, '/');
+        $this->username = $username;
+        $this->password = $password;
+        $this->transport = $transport ?? new CurlTransport(new Psr17Factory(), new Psr17Factory());
+
+        // 设置基础URL
+        $this->transport->setBaseUrl($this->baseUrl);
+    }
+
+    /**
+     * 验证配置
+     *
+     * @param string $baseUrl 基础URL
+     * @param string $username 用户名
+     * @param string $password 密码
+     * @throws ValidationException 配置异常
+     */
+    private function validateConfiguration(string $baseUrl, string $username, string $password): void
     {
-        // 验证配置
-        if (!$config->validate()) {
-            throw ValidationException::invalidConfig($config->getErrors());
+        if (empty(trim($baseUrl))) {
+            throw new ValidationException('qBittorrent服务器地址不能为空');
         }
 
-        $this->config = $config;
-        $this->transport = $transport ?? new CurlTransport();
+        if (!filter_var($baseUrl, FILTER_VALIDATE_URL) && !str_starts_with($baseUrl, 'http://') && !str_starts_with($baseUrl, 'https://')) {
+            throw new ValidationException('qBittorrent服务器地址格式无效，必须以http://或https://开头');
+        }
 
-        // 配置传输层
-        $this->configureTransport();
+        if (empty(trim($username))) {
+            throw new ValidationException('用户名不能为空');
+        }
+
+        if (empty(trim($password))) {
+            throw new ValidationException('密码不能为空');
+        }
     }
 
     /**
      * 认证登录
      *
-     * @throws AuthenticationException 认证失败
-     * @throws NetworkException 网络错误
+     * @return bool 是否认证成功
+     * @throws AuthenticationException 认证异常
+     * @throws NetworkException 网络异常
      */
-    public function login(): void
+    public function login(): bool
     {
         try {
-            $authAPI = $this->getAuthAPI();
-            $success = $authAPI->login(
-                $this->config->getUsername(),
-                $this->config->getPassword()
-            );
+            $response = $this->transport->request('POST', '/api/v2/auth/login', [
+                'username' => $this->username,
+                'password' => $this->password,
+            ]);
 
-            if ($success) {
-                $this->isLoggedIn = true;
-            } else {
-                throw new AuthenticationException('登录失败：用户名或密码错误');
-            }
-
-        } catch (AuthenticationException $e) {
-            $this->isLoggedIn = false;
-            throw $e;
+            // 对于登录端点，成功时返回空数组，失败时会抛出异常
+        $this->authenticated = true;
+        return true;
         } catch (NetworkException $e) {
-            $this->isLoggedIn = false;
-            throw $e;
+            throw new AuthenticationException(
+                '认证时发生网络错误: ' . $e->getMessage(),
+                'AUTH_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $this->username,
+                'network_error',
+                $e
+            );
         }
+    }
+
+    /**
+     * 检查是否已认证
+     *
+     * @return bool
+     */
+    public function isLoggedIn(): bool
+    {
+        return $this->authenticated;
     }
 
     /**
      * 登出
      *
-     * @throws ClientException 登出失败
+     * @return bool 是否登出成功
+     * @throws NetworkException 网络异常
      */
-    public function logout(): void
+    public function logout(): bool
     {
-        if ($this->isLoggedIn) {
-            try {
-                $this->getAuthAPI()->logout();
-            } finally {
-                $this->isLoggedIn = false;
-                $this->transport->setAuthentication(null);
-            }
+        if (!$this->authenticated) {
+            return true;
+        }
+
+        try {
+            $response = $this->transport->request('POST', '/api/v2/auth/logout');
+            $this->authenticated = false;
+            return true; // 登出端点成功时返回空数组
+        } catch (NetworkException $e) {
+            // 即使登出失败，也标记为未认证
+            $this->authenticated = false;
+            throw $e;
         }
     }
 
     /**
-     * 检查是否已登录
-     */
-    public function isLoggedIn(): bool
-    {
-        return $this->isLoggedIn;
-    }
-
-    /**
-     * 获取认证API
-     */
-    public function getAuthAPI(): AuthAPI
-    {
-        if ($this->authAPI === null) {
-            $this->authAPI = new AuthAPI($this->transport);
-        }
-
-        return $this->authAPI;
-    }
-
-    /**
-     * 获取Torrent API
+     * 检查是否已认证
      *
-     * @throws AuthenticationException 未登录时抛出异常
+     * @return bool 是否已认证
      */
-    public function getTorrentAPI(): TorrentAPI
+    public function isAuthenticated(): bool
     {
-        $this->requireAuthentication();
-
-        if ($this->torrentAPI === null) {
-            $this->torrentAPI = new TorrentAPI($this->transport);
-        }
-
-        return $this->torrentAPI;
+        return $this->authenticated;
     }
 
     /**
-     * 获取应用程序API
+     * 强制认证（如果未认证则自动认证）
      *
-     * @throws AuthenticationException 未登录时抛出异常
+     * @return bool 是否认证成功
+     * @throws AuthenticationException 认证异常
+     * @throws NetworkException 网络异常
      */
-    public function getApplicationAPI(): ApplicationAPI
+    public function ensureAuthenticated(): bool
     {
-        $this->requireAuthentication();
+        if (!$this->authenticated) {
+            return $this->login();
+        }
+        return true;
+    }
+
+    /**
+     * 获取应用API实例
+     *
+     * @return ApplicationAPI 应用API实例
+     * @throws AuthenticationException 认证异常
+     */
+    public function application(): ApplicationAPI
+    {
+        $this->ensureAuthenticated();
 
         if ($this->applicationAPI === null) {
             $this->applicationAPI = new ApplicationAPI($this->transport);
@@ -157,13 +211,14 @@ final class Client
     }
 
     /**
-     * 获取传输API
+     * 获取传输API实例
      *
-     * @throws AuthenticationException 未登录时抛出异常
+     * @return TransferAPI 传输API实例
+     * @throws AuthenticationException 认证异常
      */
-    public function getTransferAPI(): TransferAPI
+    public function transfer(): TransferAPI
     {
-        $this->requireAuthentication();
+        $this->ensureAuthenticated();
 
         if ($this->transferAPI === null) {
             $this->transferAPI = new TransferAPI($this->transport);
@@ -173,13 +228,31 @@ final class Client
     }
 
     /**
-     * 获取RSS API
+     * 获取种子API实例
      *
-     * @throws AuthenticationException 未登录时抛出异常
+     * @return TorrentAPI 种子API实例
+     * @throws AuthenticationException 认证异常
      */
-    public function getRSSAPI(): RSSAPI
+    public function torrents(): TorrentAPI
     {
-        $this->requireAuthentication();
+        $this->ensureAuthenticated();
+
+        if ($this->torrentAPI === null) {
+            $this->torrentAPI = new TorrentAPI($this->transport);
+        }
+
+        return $this->torrentAPI;
+    }
+
+    /**
+     * 获取RSS API实例
+     *
+     * @return RSSAPI RSS API实例
+     * @throws AuthenticationException 认证异常
+     */
+    public function rss(): RSSAPI
+    {
+        $this->ensureAuthenticated();
 
         if ($this->rssAPI === null) {
             $this->rssAPI = new RSSAPI($this->transport);
@@ -189,13 +262,14 @@ final class Client
     }
 
     /**
-     * 获取搜索API
+     * 获取搜索API实例
      *
-     * @throws AuthenticationException 未登录时抛出异常
+     * @return SearchAPI 搜索API实例
+     * @throws AuthenticationException 认证异常
      */
-    public function getSearchAPI(): SearchAPI
+    public function search(): SearchAPI
     {
-        $this->requireAuthentication();
+        $this->ensureAuthenticated();
 
         if ($this->searchAPI === null) {
             $this->searchAPI = new SearchAPI($this->transport);
@@ -205,15 +279,53 @@ final class Client
     }
 
     /**
-     * 获取客户端配置
+     * 获取传输API实例（别名方法）
+     *
+     * @return TransferAPI 传输API实例
+     * @throws AuthenticationException 认证异常
      */
-    public function getConfig(): ClientConfig
+    public function getTransferAPI(): TransferAPI
     {
-        return $this->config;
+        return $this->transfer();
+    }
+
+    /**
+     * 获取种子API实例（别名方法）
+     *
+     * @return TorrentAPI 种子API实例
+     * @throws AuthenticationException 认证异常
+     */
+    public function getTorrentAPI(): TorrentAPI
+    {
+        return $this->torrents();
+    }
+
+    /**
+     * 获取RSS API实例（别名方法）
+     *
+     * @return RSSAPI RSS API实例
+     * @throws AuthenticationException 认证异常
+     */
+    public function getRSSAPI(): RSSAPI
+    {
+        return $this->rss();
+    }
+
+    /**
+     * 获取搜索API实例（别名方法）
+     *
+     * @return SearchAPI 搜索API实例
+     * @throws AuthenticationException 认证异常
+     */
+    public function getSearchAPI(): SearchAPI
+    {
+        return $this->search();
     }
 
     /**
      * 获取传输层实例
+     *
+     * @return TransportInterface 传输层实例
      */
     public function getTransport(): TransportInterface
     {
@@ -224,18 +336,17 @@ final class Client
      * 设置传输层实例
      *
      * @param TransportInterface $transport 传输层实例
-     * @return self 返回当前实例以支持链式调用
+     * @return static 返回自身以支持链式调用
      */
-    public function setTransport(TransportInterface $transport): self
+    public function setTransport(TransportInterface $transport): static
     {
         $this->transport = $transport;
-        $this->configureTransport();
+        $this->transport->setBaseUrl($this->baseUrl);
 
-        // 重置所有API实例
-        $this->authAPI = null;
-        $this->torrentAPI = null;
+        // 重置所有API实例，使其使用新的传输层
         $this->applicationAPI = null;
         $this->transferAPI = null;
+        $this->torrentAPI = null;
         $this->rssAPI = null;
         $this->searchAPI = null;
 
@@ -243,171 +354,224 @@ final class Client
     }
 
     /**
-     * 更新客户端配置
+     * 获取基础URL
      *
-     * @param ClientConfig $config 新的配置
-     * @return self 返回当前实例以支持链式调用
-     * @throws ValidationException 配置验证失败
+     * @return string 基础URL
      */
-    public function updateConfig(ClientConfig $config): self
+    public function getBaseUrl(): string
     {
-        if (!$config->validate()) {
-            throw ValidationException::invalidConfig($config->getErrors());
-        }
+        return $this->baseUrl;
+    }
 
-        $this->config = $config;
-        $this->configureTransport();
+    /**
+     * 设置基础URL
+     *
+     * @param string $baseUrl 基础URL
+     * @return static 返回自身以支持链式调用
+     * @throws ValidationException 配置异常
+     */
+    public function setBaseUrl(string $baseUrl): static
+    {
+        $this->validateConfiguration($baseUrl, $this->username, $this->password);
 
-        // 如果配置变更导致认证失效，清除登录状态
-        if ($this->isLoggedIn) {
-            $this->logout();
-        }
+        $this->baseUrl = rtrim($baseUrl, '/');
+        $this->transport->setBaseUrl($this->baseUrl);
+
+        // 重新认证
+        $this->authenticated = false;
 
         return $this;
     }
 
     /**
-     * 检查qBittorrent服务器是否可访问
+     * 获取用户名
      *
-     * @return bool 服务器是否可访问
+     * @return string 用户名
      */
-    public function testConnection(): bool
+    public function getUsername(): string
     {
-        try {
-            // 尝试获取应用程序版本
-            $this->getApplicationAPI()->getVersion();
-            return true;
-        } catch (ClientException $e) {
-            return false;
-        }
+        return $this->username;
     }
 
     /**
-     * 获取qBittorrent服务器信息
+     * 设置用户名
      *
-     * @return array 服务器信息
-     * @throws ClientException 获取失败
+     * @param string $username 用户名
+     * @return static 返回自身以支持链式调用
+     * @throws ValidationException 配置异常
+     */
+    public function setUsername(string $username): static
+    {
+        if (empty(trim($username))) {
+            throw new ValidationException('用户名不能为空');
+        }
+
+        $this->username = $username;
+        $this->authenticated = false;
+
+        return $this;
+    }
+
+    /**
+     * 设置密码
+     *
+     * @param string $password 密码
+     * @return static 返回自身以支持链式调用
+     * @throws ValidationException 配置异常
+     */
+    public function setPassword(string $password): static
+    {
+        if (empty(trim($password))) {
+            throw new ValidationException('密码不能为空');
+        }
+
+        $this->password = $password;
+        $this->authenticated = false;
+
+        return $this;
+    }
+
+    /**
+     * 获取服务器信息
+     *
+     * @return array<string, mixed> 服务器信息
+     * @throws AuthenticationException 认证异常
+     * @throws NetworkException 网络异常
      */
     public function getServerInfo(): array
     {
-        $appAPI = $this->getApplicationAPI();
-
-        return [
-            'version' => $appAPI->getVersion(),
-            'web_api_version' => $appAPI->getWebApiVersion(),
-            'build_info' => $appAPI->getBuildInfo(),
-            'preferences' => $appAPI->getPreferences(),
-        ];
-    }
-
-    /**
-     * 关闭客户端并清理资源
-     */
-    public function close(): void
-    {
         try {
-            if ($this->isLoggedIn) {
-                $this->logout();
+            $this->ensureAuthenticated();
+
+            $applicationAPI = $this->application();
+
+            // 获取版本信息
+            $versionResponse = $applicationAPI->getVersion(\PhpQbittorrent\Request\Application\GetVersionRequest::create());
+            $webApiVersionResponse = $applicationAPI->getWebApiVersion(\PhpQbittorrent\Request\Application\GetWebApiVersionRequest::create());
+
+            $serverInfo = [
+                'version' => $versionResponse->isSuccess() ? $versionResponse->getVersion() : 'Unknown',
+                'web_api_version' => $webApiVersionResponse->isSuccess() ? $webApiVersionResponse->getVersion() : 'Unknown',
+            ];
+
+            // 尝试获取构建信息（可选）
+            try {
+                $buildInfoResponse = $applicationAPI->getBuildInfo(\PhpQbittorrent\Request\Application\GetBuildInfoRequest::create());
+                if ($buildInfoResponse->isSuccess()) {
+                    $serverInfo['build_info'] = $buildInfoResponse->getBuildInfo();
+                }
+            } catch (\Exception $e) {
+                // 构建信息获取失败不影响主要功能
+                $serverInfo['build_info'] = null;
             }
-        } finally {
-            $this->transport->close();
-        }
-    }
 
-    /**
-     * 析构函数
-     */
-    public function __destruct()
-    {
-        $this->close();
-    }
+            return $serverInfo;
 
-    /**
-     * 配置传输层
-     */
-    private function configureTransport(): void
-    {
-        $this->transport->setBaseUrl($this->config->getUrl());
-        $this->transport->setTimeout($this->config->getTimeout());
-        $this->transport->setConnectTimeout($this->config->getConnectTimeout());
-        $this->transport->setUserAgent($this->config->getUserAgent());
-        $this->transport->setVerifySSL($this->config->isVerifySSL());
-
-        if ($this->config->getSSLCertPath()) {
-            $this->transport->setSSLCertPath($this->config->getSSLCertPath());
-        }
-
-        if ($this->config->getProxy()) {
-            $this->transport->setProxy(
-                $this->config->getProxy(),
-                $this->config->getProxyAuth()
+        } catch (NetworkException $e) {
+            throw new NetworkException(
+                '获取服务器信息失败: ' . $e->getMessage(),
+                'GET_SERVER_INFO_FAILED',
+                ['original_error' => $e->getMessage()],
+                $e
             );
         }
     }
 
     /**
-     * 要求认证状态
+     * 测试连接
      *
-     * @throws AuthenticationException 未登录时抛出异常
+     * @return bool 连接是否成功
+     * @throws NetworkException 网络异常
+     * @throws AuthenticationException 认证异常
      */
-    private function requireAuthentication(): void
+    public function testConnection(): bool
     {
-        if (!$this->isLoggedIn) {
-            throw new AuthenticationException('需要进行认证登录', 'AUTHENTICATION_REQUIRED');
+        try {
+            // 尝试获取应用版本作为连接测试
+            $versionResponse = $this->application()->getVersion(\PhpQbittorrent\Request\Application\GetVersionRequest::create());
+            return $versionResponse->isSuccess();
+        } catch (NetworkException $e) {
+            throw new NetworkException(
+                '连接测试失败: ' . $e->getMessage(),
+                'CONNECTION_TEST_FAILED',
+                ['original_error' => $e->getMessage()],
+                $e
+            );
         }
     }
 
     /**
-     * 创建客户端的静态工厂方法
+     * 获取客户端信息
      *
-     * @param string $url qBittorrent服务器URL
-     * @param string|null $username 用户名
-     * @param string|null $password 密码
-     * @return self 客户端实例
+     * @return array<string, mixed> 客户端信息
      */
-    public static function create(string $url, ?string $username = null, ?string $password = null): self
+    public function getClientInfo(): array
     {
-        $config = new ClientConfig($url, $username, $password);
-        return new self($config);
-    }
-
-    /**
-     * 从配置数组创建客户端
-     *
-     * @param array $config 配置数组
-     * @return self 客户端实例
-     * @throws ValidationException 配置验证失败
-     */
-    public static function fromArray(array $config): self
-    {
-        $clientConfig = ClientConfig::fromArray($config);
-        return new self($clientConfig);
-    }
-
-    /**
-     * 魔术方法：获取API实例的便捷访问
-     *
-     * @param string $name API名称
-     * @return mixed API实例
-     * @throws ClientException 不支持的API
-     */
-    public function __get(string $name)
-    {
-        $apiMap = [
-            'auth' => 'getAuthAPI',
-            'torrent' => 'getTorrentAPI',
-            'application' => 'getApplicationAPI',
-            'transfer' => 'getTransferAPI',
-            'rss' => 'getRSSAPI',
-            'search' => 'getSearchAPI',
+        return [
+            'base_url' => $this->baseUrl,
+            'username' => $this->username,
+            'authenticated' => $this->authenticated,
+            'transport_class' => get_class($this->transport),
+            'api_instances' => [
+                'application' => $this->applicationAPI !== null,
+                'transfer' => $this->transferAPI !== null,
+                'torrents' => $this->torrentAPI !== null,
+                'rss' => $this->rssAPI !== null,
+                'search' => $this->searchAPI !== null,
+            ],
         ];
+    }
 
-        $method = $apiMap[strtolower($name)] ?? null;
+    /**
+     * 创建客户端实例
+     *
+     * @param string $baseUrl qBittorrent服务器地址
+     * @param string $username 用户名
+     * @param string $password 密码
+     * @param TransportInterface|null $transport 自定义传输层实例
+     * @return self 客户端实例
+     */
+    public static function create(
+        string $baseUrl,
+        string $username,
+        string $password,
+        ?TransportInterface $transport = null
+    ): self {
+        return new self($baseUrl, $username, $password, $transport);
+    }
 
-        if ($method && method_exists($this, $method)) {
-            return $this->$method();
+    /**
+     * 从配置数组创建客户端实例
+     *
+     * @param array<string, mixed> $config 配置数组
+     * @return self 客户端实例
+     * @throws ValidationException 配置异常
+     */
+    public static function fromConfig(array $config): self
+    {
+        $baseUrl = $config['base_url'] ?? $config['baseUrl'] ?? '';
+        $username = $config['username'] ?? '';
+        $password = $config['password'] ?? '';
+        $transport = $config['transport'] ?? null;
+
+        if (empty($baseUrl) || empty($username) || empty($password)) {
+            throw new ValidationException('配置数组中缺少必要的参数：base_url, username, password');
         }
 
-        throw new ClientException("未知的API: {$name}");
+        return new self($baseUrl, $username, $password, $transport);
+    }
+
+    /**
+     * 析构函数 - 自动登出
+     */
+    public function __destruct()
+    {
+        if ($this->authenticated) {
+            try {
+                $this->logout();
+            } catch (\Exception $e) {
+                // 静默处理登出错误
+            }
+        }
     }
 }

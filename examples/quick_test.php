@@ -397,29 +397,78 @@ function showTestConfig(array $config): void
  */
 function testConnectionAndAuth(Client $client, array $config): void
 {
-    // 使用config变量避免未使用警告
-    unset($config);
-
     echo "📡 创建客户端配置...\n";
     echo "✅ 客户端创建成功\n\n";
 
     echo "🔗 直接进行登录测试...\n";
     try {
+        echo "   尝试连接到: {$config['url']}\n";
+        echo "   使用用户名: {$config['username']}\n";
+
         $client->login();
         if ($client->isLoggedIn()) {
             echo "✅ 登录成功 - qBittorrent API 可访问\n\n";
         } else {
-            echo "❌ 登录失败\n";
-            echo "请检查用户名和密码\n\n";
+            echo "❌ 登录失败 - 认证状态异常\n";
+            echo "   详细信息: 登录方法返回成功但isAuthenticated()为false\n\n";
             exit(1);
         }
+    } catch (\PhpQbittorrent\Exception\AuthenticationException $e) {
+        echo "❌ 认证失败: " . $e->getMessage() . "\n";
+        echo "   错误代码: " . $e->getErrorCode() . "\n";
+
+        // 检查具体的错误类型
+        $errorCode = $e->getErrorCode();
+        switch ($errorCode) {
+            case 'ACCESS_DENIED':
+                echo "   错误类型: 访问被拒绝\n";
+                echo "   可能原因:\n";
+                echo "     - IP地址被qBittorrent封禁(身份认证失败次数过多)\n";
+                echo "     - 需要在qBittorrent Web界面中解除IP封禁\n";
+                echo "     - 或者重启qBittorrent服务\n";
+                break;
+            case 'AUTH_FAILED':
+                echo "   错误类型: 认证失败\n";
+                echo "   可能原因:\n";
+                echo "     - 用户名或密码错误\n";
+                echo "     - qBittorrent用户账户被禁用\n";
+                break;
+            case 'AUTH_NETWORK_ERROR':
+                echo "   错误类型: 网络错误\n";
+                echo "   可能原因:\n";
+                echo "     - 无法连接到qBittorrent服务器\n";
+                echo "     - 防火墙阻止连接\n";
+                echo "     - qBittorrent服务未运行\n";
+                break;
+            default:
+                echo "   未知认证错误类型\n";
+        }
+
+        echo "\n   建议检查:\n";
+        echo "   1. qBittorrent是否正在运行\n";
+        echo "   2. URL地址是否正确: {$config['url']}\n";
+        echo "   3. 用户名和密码是否正确\n";
+        echo "   4. Web UI是否启用\n";
+        echo "   5. 是否需要解除IP封禁\n\n";
+        exit(1);
+    } catch (\PhpQbittorrent\Exception\NetworkException $e) {
+        echo "❌ 网络错误: " . $e->getMessage() . "\n";
+        echo "   错误代码: " . $e->getCode() . "\n";
+        echo "\n   网络连接问题建议:\n";
+        echo "   - 检查qBittorrent是否正在运行\n";
+        echo "   - 验证URL地址是否正确: {$config['url']}\n";
+        echo "   - 检查防火墙设置\n";
+        echo "   - 确认网络连接正常\n\n";
+        exit(1);
     } catch (Exception $e) {
-        echo "❌ 登录过程出错: " . $e->getMessage() . "\n";
-        echo "请检查:\n";
-        echo "- qBittorrent 是否正在运行\n";
-        echo "- URL 地址是否正确\n";
-        echo "- 用户名和密码是否正确\n";
-        echo "- Web UI 是否启用\n\n";
+        echo "❌ 未知错误: " . $e->getMessage() . "\n";
+        echo "   错误类型: " . get_class($e) . "\n";
+        echo "   错误代码: " . ($e->getCode() ?: 'N/A') . "\n";
+        echo "   错误文件: " . $e->getFile() . ":" . $e->getLine() . "\n";
+
+        echo "\n   调试信息:\n";
+        echo "   - 这可能是一个配置问题或代码错误\n";
+        echo "   - 请检查PHP错误日志获取更多详细信息\n\n";
         exit(1);
     }
 }
@@ -604,7 +653,8 @@ function testTorrentList(Client $client): array
         // 5.1 Torrent列表获取测试
         echo "   5.1 🔍 获取Torrent列表...\n";
         $torrentAPI = $client->getTorrentAPI();
-        $torrents = $torrentAPI->getTorrents();
+        $torrentListResponse = $torrentAPI->getTorrentList();
+        $torrents = $torrentListResponse->getTorrents();
         $totalTorrents = count($torrents);
 
         if (is_array($torrents) && $totalTorrents >= 0) {
@@ -723,7 +773,8 @@ function testAdvancedFeatures(Client $client): void
     // 测试搜索功能
     try {
         $searchAPI = $client->getSearchAPI();
-        $plugins = $searchAPI->getSearchPlugins();
+        $pluginsResponse = $searchAPI->getSearchPlugins(\PhpQbittorrent\Request\Search\GetSearchPluginsRequest::create());
+        $plugins = $pluginsResponse->getPlugins();
         if (!empty($plugins)) {
             echo "   搜索插件: " . count($plugins) . " 个可用\n";
         } else {
@@ -1046,7 +1097,8 @@ function testCategoriesAndTags(Client $client, array $addedHashes = []): array
 
                 // 验证标签是否添加成功
                 sleep(1);
-                $updatedTorrents = $torrentAPI->getTorrents();
+                $updatedTorrentListResponse = $torrentAPI->getTorrentList();
+                $updatedTorrents = $updatedTorrentListResponse->getTorrents();
                 $foundTorrent = null;
                 foreach ($updatedTorrents as $torrent) {
                     if ($torrent['hash'] === $testHash) {
@@ -1103,7 +1155,8 @@ function testCategoriesAndTags(Client $client, array $addedHashes = []): array
 
                 // 验证关联是否成功
                 sleep(1);
-                $finalTorrents = $torrentAPI->getTorrents();
+                $finalTorrentListResponse = $torrentAPI->getTorrentList();
+                $finalTorrents = $finalTorrentListResponse->getTorrents();
                 $finalTorrent = null;
                 foreach ($finalTorrents as $torrent) {
                     if ($torrent['hash'] === $testHash) {
@@ -1208,7 +1261,8 @@ function testMagnetLinks(Client $client, array $config): array
     $torrentAPI = $client->getTorrentAPI();
 
     // 获取测试前的torrent数量
-    $initialTorrents = $torrentAPI->getTorrents();
+    $initialTorrentListResponse = $torrentAPI->getTorrentList();
+    $initialTorrents = $initialTorrentListResponse->getTorrents();
     $initialCount = count($initialTorrents);
     echo "   测试前torrent数量: {$initialCount}\n";
 
@@ -1233,7 +1287,8 @@ function testMagnetLinks(Client $client, array $config): array
                 sleep(1);
 
                 // 获取新添加的torrent hash
-                $currentTorrents = $torrentAPI->getTorrents();
+                $currentTorrentListResponse = $torrentAPI->getTorrentList();
+                $currentTorrents = $currentTorrentListResponse->getTorrents();
                 foreach ($currentTorrents as $torrent) {
                     $hash = $torrent['hash'] ?? '';
                     if ($hash && !in_array($hash, array_column($initialTorrents, 'hash'))) {
@@ -1259,7 +1314,8 @@ function testMagnetLinks(Client $client, array $config): array
 
     // 改进的种子检测逻辑 - 即使没有新增种子也能识别测试种子
     echo "   📊 检测测试种子hash...\n";
-    $finalTorrents = $torrentAPI->getTorrents();
+    $finalTorrentListResponse = $torrentAPI->getTorrentList();
+                $finalTorrents = $finalTorrentListResponse->getTorrents();
 
     // 获取所有测试磁力链接的期望hash
     $testMagnets = getTestMagnets();
@@ -1295,7 +1351,8 @@ function testMagnetLinks(Client $client, array $config): array
         sleep(15); // 额外等待元数据下载
 
         // 重新检查
-        $updatedTorrents = $torrentAPI->getTorrents();
+        $updatedTorrentListResponse = $torrentAPI->getTorrentList();
+                $updatedTorrents = $updatedTorrentListResponse->getTorrents();
         foreach ($updatedTorrents as $torrent) {
             $hash = strtolower($torrent['hash'] ?? '');
             if (in_array($hash, $expectedHashes) && $torrent['state'] !== 'metaDL') {
@@ -1367,7 +1424,8 @@ function testTorrentManagement(Client $client, array $addedHashes, array $config
 
     echo "   验证添加的torrent:\n";
     $torrentAPI = $client->getTorrentAPI();
-    $finalTorrents = $torrentAPI->getTorrents();
+    $finalTorrentListResponse = $torrentAPI->getTorrentList();
+                $finalTorrents = $finalTorrentListResponse->getTorrents();
 
     $testHashes = [];
     foreach ($finalTorrents as $torrent) {
@@ -1594,7 +1652,8 @@ function testCategoryManagement(object $torrentAPI, string $testHash): void
  */
 function verifyTorrentState(object $torrentAPI, string $testHash, string $context): void
 {
-    $torrents = $torrentAPI->getTorrents();
+    $torrentListResponse = $torrentAPI->getTorrentList();
+    $torrents = $torrentListResponse->getTorrents();
     foreach ($torrents as $torrent) {
         if ($torrent['hash'] === $testHash) {
             echo "        {$context}状态: " . ($torrent['state'] ?? 'unknown') . "\n";
@@ -1608,7 +1667,8 @@ function verifyTorrentState(object $torrentAPI, string $testHash, string $contex
  */
 function verifyTagAdded(object $torrentAPI, string $testHash, string $testTag): void
 {
-    $updatedTorrents = $torrentAPI->getTorrents();
+    $updatedTorrentListResponse = $torrentAPI->getTorrentList();
+                $updatedTorrents = $updatedTorrentListResponse->getTorrents();
     foreach ($updatedTorrents as $torrent) {
         if ($torrent['hash'] === $testHash) {
             $currentTags = $torrent['tags'] ?? '';
@@ -1627,7 +1687,8 @@ function verifyTagAdded(object $torrentAPI, string $testHash, string $testTag): 
  */
 function verifyCategoryAdded(object $torrentAPI, string $testHash, string $testCategory): void
 {
-    $categorizedTorrents = $torrentAPI->getTorrents();
+    $categorizedTorrentListResponse = $torrentAPI->getTorrentList();
+                $categorizedTorrents = $categorizedTorrentListResponse->getTorrents();
     foreach ($categorizedTorrents as $torrent) {
         if ($torrent['hash'] === $testHash) {
             $currentCategory = $torrent['category'] ?? '';
@@ -1647,7 +1708,8 @@ function verifyCategoryAdded(object $torrentAPI, string $testHash, string $testC
 function showFinalState(object $torrentAPI, string $testHash): void
 {
     echo "     📊 最终状态检查:\n";
-    $finalTorrents = $torrentAPI->getTorrents();
+    $finalTorrentListResponse = $torrentAPI->getTorrentList();
+                $finalTorrents = $finalTorrentListResponse->getTorrents();
     foreach ($finalTorrents as $torrent) {
         if ($torrent['hash'] === $testHash) {
             echo "        状态: " . ($torrent['state'] ?? 'unknown') . "\n";
@@ -1900,7 +1962,7 @@ function testErrorHandling(Client $client): void
 
         for ($i = 0; $i < $requestCount; $i++) {
             try {
-                $torrentAPI->getTorrents();
+                $torrentAPI->getTorrentList();
                 $successCount++;
 
                 // 短暂延迟模拟正常使用
@@ -2077,16 +2139,11 @@ $start_time = microtime(true);
 
 try {
     // 创建客户端
-    $configArray = [
-        'url' => $config['url'],
-        'username' => $config['username'],
-        'password' => $config['password'],
-        'timeout' => $config['timeout'],
-        'verify_ssl' => $config['verify_ssl'],
-        'user_agent' => 'PHP qBittorrent Library Test v0.2.0'
-    ];
-
-    $client = Client::fromArray($configArray);
+    $client = new Client(
+        $config['url'],
+        $config['username'],
+        $config['password']
+    );
 
     // 1-2. 基础连接和认证测试
     testConnectionAndAuth($client, $config);

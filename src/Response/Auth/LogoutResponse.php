@@ -1,11 +1,11 @@
 <?php
 declare(strict_types=1);
 
-namespace Dongasai\qBittorrent\Response\Auth;
+namespace PhpQbittorrent\Response\Auth;
 
-use Dongasai\qBittorrent\Response\AbstractResponse;
-use Dongasai\qBittorrent\Contract\ValidationResult;
-use Dongasai\qBittorrent\Validation\BasicValidationResult;
+use PhpQbittorrent\Response\AbstractResponse;
+use PhpQbittorrent\Contract\ValidationResult;
+use PhpQbittorrent\Validation\BasicValidationResult;
 
 /**
  * 登出响应对象

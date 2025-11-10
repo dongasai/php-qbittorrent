@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Dongasai\qBittorrent\Contract;
+namespace PhpQbittorrent\Contract;
 
 /**
  * 验证结果接口

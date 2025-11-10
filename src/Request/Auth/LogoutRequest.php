@@ -1,12 +1,12 @@
 <?php
 declare(strict_types=1);
 
-namespace Dongasai\qBittorrent\Request\Auth;
+namespace PhpQbittorrent\Request\Auth;
 
-use Dongasai\qBittorrent\Request\AbstractRequest;
-use Dongasai\qBittorrent\Contract\ValidationResult;
-use Dongasai\qBittorrent\Validation\BasicValidationResult;
-use Dongasai\qBittorrent\Exception\ValidationException;
+use PhpQbittorrent\Request\AbstractRequest;
+use PhpQbittorrent\Contract\ValidationResult;
+use PhpQbittorrent\Validation\BasicValidationResult;
+use PhpQbittorrent\Exception\ValidationException;
 
 /**
  * 登出请求对象
@@ -236,6 +236,6 @@ class LogoutRequestBuilder
      */
     public function validate(): ValidationResult
     {
-        return \Dongasai\qBittorrent\Validation\BasicValidationResult::success();
+        return \PhpQbittorrent\Validation\BasicValidationResult::success();
     }
 }

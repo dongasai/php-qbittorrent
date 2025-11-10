@@ -4,16 +4,16 @@ declare(strict_types=1);
 namespace PhpQbittorrent\Tests\Unit\Model;
 
 use PhpQbittorrent\Enum\TorrentState;
-use PhpQbittorrent\Model\TorrentInfoV2;
+use PhpQbittorrent\Model\TorrentInfo;
 use PhpQbittorrent\Tests\TestCase;
 
 /**
- * TorrentInfoV2 单元测试
+ * TorrentInfo 单元测试
  */
-class TorrentInfoV2Test extends TestCase
+class TorrentInfoTest extends TestCase
 {
     /**
-     * 测试从数组创建TorrentInfoV2对象
+     * 测试从数组创建TorrentInfo对象
      */
     public function testFromArray(): void
     {
@@ -35,7 +35,7 @@ class TorrentInfoV2Test extends TestCase
             'num_leechs' => 5,
         ];
 
-        $torrent = TorrentInfoV2::fromArray($data);
+        $torrent = TorrentInfo::fromArray($data);
 
         $this->assertSame($data['hash'], $torrent->getHash());
         $this->assertSame($data['name'], $torrent->getName());
@@ -64,7 +64,7 @@ class TorrentInfoV2Test extends TestCase
             'name' => 'Test',
         ];
 
-        $torrent = TorrentInfoV2::fromArray($data);
+        $torrent = TorrentInfo::fromArray($data);
 
         $this->assertSame(0, $torrent->getSize());
         $this->assertSame(0.0, $torrent->getProgress());
@@ -92,7 +92,7 @@ class TorrentInfoV2Test extends TestCase
         ];
 
         foreach ($testCases as $case) {
-            $torrent = TorrentInfoV2::fromArray([
+            $torrent = TorrentInfo::fromArray([
                 'hash' => 'test',
                 'name' => 'test',
                 'state' => $case['state'],
@@ -122,7 +122,7 @@ class TorrentInfoV2Test extends TestCase
      */
     public function testFormattingMethods(): void
     {
-        $torrent = TorrentInfoV2::fromArray([
+        $torrent = TorrentInfo::fromArray([
             'hash' => 'test',
             'name' => 'Test Torrent',
             'size' => 1073741824, // 1GB
@@ -148,7 +148,7 @@ class TorrentInfoV2Test extends TestCase
      */
     public function testTagHandling(): void
     {
-        $torrent = TorrentInfoV2::fromArray([
+        $torrent = TorrentInfo::fromArray([
             'hash' => 'test',
             'name' => 'Test',
             'tags' => 'tag1,tag2,tag3',
@@ -161,7 +161,7 @@ class TorrentInfoV2Test extends TestCase
         $this->assertFalse($torrent->hasTag('nonexistent'));
 
         // 测试空标签
-        $emptyTorrent = TorrentInfoV2::fromArray([
+        $emptyTorrent = TorrentInfo::fromArray([
             'hash' => 'test2',
             'name' => 'Test2',
             'tags' => '',
@@ -176,7 +176,7 @@ class TorrentInfoV2Test extends TestCase
      */
     public function testCategoryHandling(): void
     {
-        $torrent = TorrentInfoV2::fromArray([
+        $torrent = TorrentInfo::fromArray([
             'hash' => 'test',
             'name' => 'Test',
             'category' => 'movies',
@@ -185,7 +185,7 @@ class TorrentInfoV2Test extends TestCase
         $this->assertTrue($torrent->hasCategory());
         $this->assertSame('movies', $torrent->getCategory());
 
-        $emptyTorrent = TorrentInfoV2::fromArray([
+        $emptyTorrent = TorrentInfo::fromArray([
             'hash' => 'test2',
             'name' => 'Test2',
             'category' => '',
@@ -200,7 +200,7 @@ class TorrentInfoV2Test extends TestCase
      */
     public function testProgressCalculations(): void
     {
-        $torrent = TorrentInfoV2::fromArray([
+        $torrent = TorrentInfo::fromArray([
             'hash' => 'test',
             'name' => 'Test',
             'size' => 1000,
@@ -213,7 +213,7 @@ class TorrentInfoV2Test extends TestCase
         $this->assertSame(250, $torrent->getRemainingSize());
         $this->assertTrue($torrent->isCompletedOrSeeding());
 
-        $downloadingTorrent = TorrentInfoV2::fromArray([
+        $downloadingTorrent = TorrentInfo::fromArray([
             'hash' => 'test2',
             'name' => 'Test2',
             'size' => 1000,
@@ -233,7 +233,7 @@ class TorrentInfoV2Test extends TestCase
      */
     public function testActivityStatus(): void
     {
-        $activeTorrent = TorrentInfoV2::fromArray([
+        $activeTorrent = TorrentInfo::fromArray([
             'hash' => 'test',
             'name' => 'Test',
             'dlspeed' => 1048576,
@@ -243,7 +243,7 @@ class TorrentInfoV2Test extends TestCase
         $this->assertTrue($activeTorrent->hasActivity());
         $this->assertSame('中速', $activeTorrent->getSpeedRank());
 
-        $highSpeedTorrent = TorrentInfoV2::fromArray([
+        $highSpeedTorrent = TorrentInfo::fromArray([
             'hash' => 'test2',
             'name' => 'Test2',
             'dlspeed' => 10485760, // 10MB/s
@@ -253,7 +253,7 @@ class TorrentInfoV2Test extends TestCase
         $this->assertTrue($highSpeedTorrent->hasActivity());
         $this->assertSame('高速', $highSpeedTorrent->getSpeedRank());
 
-        $idleTorrent = TorrentInfoV2::fromArray([
+        $idleTorrent = TorrentInfo::fromArray([
             'hash' => 'test3',
             'name' => 'Test3',
             'dlspeed' => 0,
@@ -279,7 +279,7 @@ class TorrentInfoV2Test extends TestCase
             'tags' => 'tag1,tag2',
         ];
 
-        $torrent = TorrentInfoV2::fromArray($data);
+        $torrent = TorrentInfo::fromArray($data);
         $array = $torrent->toArray();
 
         $this->assertIsArray($array);
@@ -311,7 +311,7 @@ class TorrentInfoV2Test extends TestCase
             'state' => 'downloading',
         ];
 
-        $torrent = TorrentInfoV2::fromArray($data);
+        $torrent = TorrentInfo::fromArray($data);
         $json = json_encode($torrent);
         $decoded = json_decode($json, true);
 
@@ -328,7 +328,7 @@ class TorrentInfoV2Test extends TestCase
      */
     public function testStalledStatus(): void
     {
-        $stalledDL = TorrentInfoV2::fromArray([
+        $stalledDL = TorrentInfo::fromArray([
             'hash' => 'test',
             'name' => 'Test',
             'state' => 'stalledDL',
@@ -336,7 +336,7 @@ class TorrentInfoV2Test extends TestCase
 
         $this->assertTrue($stalledDL->isStalled());
 
-        $stalledUP = TorrentInfoV2::fromArray([
+        $stalledUP = TorrentInfo::fromArray([
             'hash' => 'test2',
             'name' => 'Test2',
             'state' => 'stalledUP',
@@ -344,7 +344,7 @@ class TorrentInfoV2Test extends TestCase
 
         $this->assertTrue($stalledUP->isStalled());
 
-        $activeTorrent = TorrentInfoV2::fromArray([
+        $activeTorrent = TorrentInfo::fromArray([
             'hash' => 'test3',
             'name' => 'Test3',
             'state' => 'downloading',
@@ -358,7 +358,7 @@ class TorrentInfoV2Test extends TestCase
      */
     public function testErrorStatus(): void
     {
-        $errorTorrent = TorrentInfoV2::fromArray([
+        $errorTorrent = TorrentInfo::fromArray([
             'hash' => 'test',
             'name' => 'Test',
             'state' => 'error',
@@ -366,7 +366,7 @@ class TorrentInfoV2Test extends TestCase
 
         $this->assertTrue($errorTorrent->hasError());
 
-        $missingFilesTorrent = TorrentInfoV2::fromArray([
+        $missingFilesTorrent = TorrentInfo::fromArray([
             'hash' => 'test2',
             'name' => 'Test2',
             'state' => 'missingFiles',
@@ -374,7 +374,7 @@ class TorrentInfoV2Test extends TestCase
 
         $this->assertTrue($missingFilesTorrent->hasError());
 
-        $normalTorrent = TorrentInfoV2::fromArray([
+        $normalTorrent = TorrentInfo::fromArray([
             'hash' => 'test3',
             'name' => 'Test3',
             'state' => 'downloading',

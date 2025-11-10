@@ -1,9 +1,9 @@
 <?php
 declare(strict_types=1);
 
-namespace Dongasai\qBittorrent\Response\Transfer;
+namespace PhpQbittorrent\Response\Transfer;
 
-use Dongasai\qBittorrent\Response\AbstractResponse;
+use PhpQbittorrent\Response\AbstractResponse;
 
 /**
  * 替代速度限制状态响应对象

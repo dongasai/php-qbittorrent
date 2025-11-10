@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace PhpQbittorrent\Transport;
 
+use PhpQbittorrent\Contract\TransportInterface;
+use PhpQbittorrent\Contract\TransportResponse;
 use PhpQbittorrent\Exception\ClientException;
 use PhpQbittorrent\Exception\NetworkException;
 use PhpQbittorrent\Exception\AuthenticationException;
@@ -54,6 +56,13 @@ final class CurlTransport implements TransportInterface
 
         $request = $request->withHeader('User-Agent', $this->userAgent);
         $request = $request->withHeader('Accept', 'application/json');
+
+        // 添加CSRF保护所需的头信息
+        $baseUrl = $this->getBaseUrl();
+        if ($baseUrl) {
+            $request = $request->withHeader('Referer', $baseUrl . '/');
+            $request = $request->withHeader('Origin', $baseUrl);
+        }
 
         // 处理请求体
         if (isset($options['json']) && is_array($options['json'])) {
@@ -187,9 +196,10 @@ final class CurlTransport implements TransportInterface
         return $response;
     }
 
-    public function setBaseUrl(string $baseUrl): void
+    public function setBaseUrl(string $baseUrl): static
     {
         $this->baseUrl = rtrim($baseUrl, '/');
+        return $this;
     }
 
     public function getBaseUrl(): string
@@ -217,9 +227,10 @@ final class CurlTransport implements TransportInterface
         return $this->lastError;
     }
 
-    public function setTimeout(float $timeout): void
+    public function setTimeout(int $timeout): static
     {
         $this->timeout = $timeout;
+        return $this;
     }
 
     public function setConnectTimeout(float $timeout): void
@@ -281,6 +292,9 @@ final class CurlTransport implements TransportInterface
         $statusCode = $response->getStatusCode();
         $body = (string) $response->getBody();
 
+        // 处理响应头中的Cookie（特别是登录后的SID）
+        $this->handleCookies($response->getHeaderLine('Set-Cookie'));
+
         // 处理认证失败
         if ($statusCode === 401 || $statusCode === 403) {
             $uri = $this->getBaseUrl() ? $this->getBaseUrl() : 'unknown';
@@ -340,24 +354,24 @@ final class CurlTransport implements TransportInterface
     /**
      * 处理响应中的Cookie
      */
-    private function handleCookies(string $responseHeaders): void
+    private function handleCookies(string $setCookieHeader): void
     {
-        $headers = explode("\r\n", $responseHeaders);
-        foreach ($headers as $header) {
-            if (str_starts_with(strtolower($header), 'set-cookie:')) {
-                $cookieLine = substr($header, 11); // 移除 'Set-Cookie:'
-                $parts = explode(';', $cookieLine);
-                $cookiePart = trim($parts[0]);
+        if (empty($setCookieHeader)) {
+            return;
+        }
 
-                if (str_contains($cookiePart, '=')) {
-                    list($name, $value) = explode('=', $cookiePart, 2);
+        // 处理 Set-Cookie 头
+        $cookieParts = explode(';', $setCookieHeader);
+        $cookiePart = trim($cookieParts[0]);
 
-                    // 如果是SID cookie，保存到认证信息中
-                    if (trim($name) === 'SID') {
-                        $this->cookie = trim($cookiePart);
-                        break;
-                    }
-                }
+        if (str_contains($cookiePart, '=')) {
+            list($name, $value) = explode('=', $cookiePart, 2);
+
+            // 如果是SID cookie，保存到认证信息中
+            if (trim($name) === 'SID') {
+                $this->cookie = trim($cookiePart);
+                // 保存完整的 cookie 字符串，包括域名和路径
+                $this->cookie = $setCookieHeader;
             }
         }
     }
@@ -434,5 +448,173 @@ final class CurlTransport implements TransportInterface
 
         $body .= "--{$boundary}--\r\n";
         return $body;
+    }
+
+    /**
+     * 设置请求头
+     *
+     * @param array<string, string> $headers 请求头
+     * @return static 返回自身以支持链式调用
+     */
+    public function setHeaders(array $headers): static
+    {
+        // 注意：这个实现是基础的，实际使用中可能需要更复杂的头管理
+        // 由于当前实现使用request()方法的headers参数，这里提供一个占位实现
+        return $this;
+    }
+
+    /**
+     * 添加请求头
+     *
+     * @param string $name 头名称
+     * @param string $value 头值
+     * @return static 返回自身以支持链式调用
+     */
+    public function addHeader(string $name, string $value): static
+    {
+        // 注意：这个实现是基础的，实际使用中可能需要更复杂的头管理
+        // 由于当前实现使用request()方法的headers参数，这里提供一个占位实现
+        return $this;
+    }
+
+    /**
+     * 设置认证信息
+     *
+     * @param string $username 用户名
+     * @param string $password 密码
+     * @return static 返回自身以支持链式调用
+     */
+    public function setAuth(string $username, string $password): static
+    {
+        // 注意：qBittorrent使用cookie认证，这里提供一个占位实现
+        return $this;
+    }
+
+    /**
+     * 设置Cookie
+     *
+     * @param string $cookie Cookie字符串
+     * @return static 返回自身以支持链式调用
+     */
+    public function setCookie(string $cookie): static
+    {
+        $this->cookie = $cookie;
+        return $this;
+    }
+
+    /**
+     * 启用/禁用SSL验证
+     *
+     * @param bool $verify 是否验证SSL
+     * @return static 返回自身以支持链式调用
+     */
+    public function setSslVerify(bool $verify): static
+    {
+        $this->verifySSL = $verify;
+        return $this;
+    }
+
+    /**
+     * 执行HTTP GET请求
+     *
+     * @param string $url 请求URL
+     * @param array<string, mixed> $parameters 查询参数
+     * @param array<string, string> $headers 请求头
+     * @return TransportResponse 传输响应
+     * @throws NetworkException 网络异常
+     */
+    public function get(string $url, array $parameters = [], array $headers = []): TransportResponse
+    {
+        $options = [
+            'query' => $parameters,
+            'headers' => $headers,
+        ];
+        $responseData = $this->request('GET', $url, $options);
+
+        return new class($responseData) implements TransportResponse {
+            public function __construct(private array $data) {}
+            public function getStatusCode(): int { return $this->data['status_code'] ?? 200; }
+            public function getHeaders(): array { return $this->data['headers'] ?? []; }
+            public function getBody(): string { return $this->data['body'] ?? ''; }
+            public function getData(): mixed { return $this->data['data'] ?? null; }
+        };
+    }
+
+    /**
+     * 执行HTTP POST请求
+     *
+     * @param string $url 请求URL
+     * @param array<string, mixed> $data 请求数据
+     * @param array<string, string> $headers 请求头
+     * @return TransportResponse 传输响应
+     * @throws NetworkException 网络异常
+     */
+    public function post(string $url, array $data = [], array $headers = []): TransportResponse
+    {
+        $options = [
+            'form_params' => $data,
+            'headers' => $headers,
+        ];
+        $responseData = $this->request('POST', $url, $options);
+
+        return new class($responseData) implements TransportResponse {
+            public function __construct(private array $data) {}
+            public function getStatusCode(): int { return $this->data['status_code'] ?? 200; }
+            public function getHeaders(): array { return $this->data['headers'] ?? []; }
+            public function getBody(): string { return $this->data['body'] ?? ''; }
+            public function getData(): mixed { return $this->data['data'] ?? null; }
+        };
+    }
+
+    /**
+     * 执行HTTP PUT请求
+     *
+     * @param string $url 请求URL
+     * @param array<string, mixed> $data 请求数据
+     * @param array<string, string> $headers 请求头
+     * @return TransportResponse 传输响应
+     * @throws NetworkException 网络异常
+     */
+    public function put(string $url, array $data = [], array $headers = []): TransportResponse
+    {
+        $options = [
+            'json' => $data,
+            'headers' => $headers,
+        ];
+        $responseData = $this->request('PUT', $url, $options);
+
+        return new class($responseData) implements TransportResponse {
+            public function __construct(private array $data) {}
+            public function getStatusCode(): int { return $this->data['status_code'] ?? 200; }
+            public function getHeaders(): array { return $this->data['headers'] ?? []; }
+            public function getBody(): string { return $this->data['body'] ?? ''; }
+            public function getData(): mixed { return $this->data['data'] ?? null; }
+        };
+    }
+
+    /**
+     * 执行HTTP DELETE请求
+     *
+     * @param string $url 请求URL
+     * @param array<string, mixed> $parameters 查询参数
+     * @param array<string, string> $headers 请求头
+     * @return TransportResponse 传输响应
+     * @throws NetworkException 网络异常
+     */
+    public function delete(string $url, array $parameters = [], array $headers = []): TransportResponse
+    {
+        $options = [
+            'query' => $parameters,
+            'headers' => $headers,
+        ];
+        $responseData = $this->request('DELETE', $url, $options);
+
+        return new class($responseData) implements TransportResponse {
+            public function __construct(private array $data) {}
+            public function getStatusCode(): int { return $this->data['status_code'] ?? 200; }
+            public function getHeaders(): array { return $this->data['headers'] ?? []; }
+            public function getBody(): string { return $this->data['body'] ?? ''; }
+            public function getData(): mixed { return $this->data['data'] ?? null; }
+        };
     }
 }

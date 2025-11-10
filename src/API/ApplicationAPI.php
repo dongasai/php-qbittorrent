@@ -3,310 +3,360 @@ declare(strict_types=1);
 
 namespace PhpQbittorrent\API;
 
-use PhpQbittorrent\Transport\TransportInterface;
-use PhpQbittorrent\Exception\ClientException;
+use PhpQbittorrent\Contract\ApiInterface;
+use PhpQbittorrent\Contract\TransportInterface;
+use PhpQbittorrent\Request\Application\GetVersionRequest;
+use PhpQbittorrent\Request\Application\GetWebApiVersionRequest;
+use PhpQbittorrent\Request\Application\GetBuildInfoRequest;
+use PhpQbittorrent\Response\Application\VersionResponse;
+use PhpQbittorrent\Response\Application\BuildInfoResponse;
+use PhpQbittorrent\Exception\NetworkException;
+use PhpQbittorrent\Exception\ApiRuntimeException;
+use PhpQbittorrent\Exception\ValidationException;
 
 /**
- * 应用程序API类
+ * Application API 参数对象化
  *
- * 处理qBittorrent应用程序相关的API操作，包括版本信息、构建信息、偏好设置等
+ * 提供应用管理相关的API功能
  */
-final class ApplicationAPI
+class ApplicationAPI implements ApiInterface
 {
+    /** @var TransportInterface 传输层实例 */
     private TransportInterface $transport;
 
+    /**
+     * 构造函数
+     *
+     * @param TransportInterface $transport 传输层实例
+     */
     public function __construct(TransportInterface $transport)
     {
         $this->transport = $transport;
     }
 
     /**
-     * 获取qBittorrent应用程序版本
+     * 获取API的基础路径
      *
-     * @return string 应用程序版本号
-     * @throws ClientException 获取失败
+     * @return string API基础路径
      */
-    public function getVersion(): string
+    public function getBasePath(): string
     {
-        $response = $this->transport->request('GET', '/api/v2/app/version');
-        return $response['version'] ?? $response[0] ?? 'unknown';
+        return '/api/v2/app';
+    }
+
+    /**
+     * 获取传输层实例
+     *
+     * @return TransportInterface 传输层实例
+     */
+    public function getTransport(): TransportInterface
+    {
+        return $this->transport;
+    }
+
+    /**
+     * 设置传输层实例
+     *
+     * @param TransportInterface $transport 传输层实例
+     * @return static 返回自身以支持链式调用
+     */
+    public function setTransport(TransportInterface $transport): static
+    {
+        $this->transport = $transport;
+        return $this;
+    }
+
+    /**
+     * 执行GET请求
+     *
+     * @param string $endpoint API端点
+     * @param array<string, mixed> $parameters 请求参数
+     * @param array<string, string> $headers 请求头
+     * @return \PhpQbittorrent\Contract\ResponseInterface 响应对象
+     */
+    public function get(string $endpoint, array $parameters = [], array $headers = []): \PhpQbittorrent\Contract\ResponseInterface
+    {
+        $url = $this->getBasePath() . $endpoint;
+        $transportResponse = $this->transport->get($url, $parameters, $headers);
+        return $this->createGenericResponse($transportResponse);
+    }
+
+    /**
+     * 执行POST请求
+     *
+     * @param string $endpoint API端点
+     * @param array<string, mixed> $data 请求数据
+     * @param array<string, string> $headers 请求头
+     * @return \PhpQbittorrent\Contract\ResponseInterface 响应对象
+     */
+    public function post(string $endpoint, array $data = [], array $headers = []): \PhpQbittorrent\Contract\ResponseInterface
+    {
+        $url = $this->getBasePath() . $endpoint;
+        $transportResponse = $this->transport->post($url, $data, $headers);
+        return $this->createGenericResponse($transportResponse);
+    }
+
+    /**
+     * 获取应用版本
+     *
+     * @param GetVersionRequest $request 获取版本请求
+     * @return VersionResponse 版本响应
+     * @throws NetworkException 网络异常
+     * @throws ValidationException 验证异常
+     * @throws ApiRuntimeException API运行时异常
+     */
+    public function getVersion(GetVersionRequest $request): VersionResponse
+    {
+        // 验证请求
+        $validation = $request->validate();
+        if (!$validation->isValid()) {
+            throw ValidationException::fromValidationResult(
+                $validation,
+                'GetVersion request validation failed'
+            );
+        }
+
+        try {
+            // 发送请求
+            $url = $this->getBasePath() . $request->getEndpoint();
+            $transportResponse = $this->transport->get(
+                $url,
+                $request->toArray(),
+                $request->getHeaders()
+            );
+
+            // 处理响应
+            return $this->handleVersionResponse($transportResponse, $request);
+
+        } catch (NetworkException $e) {
+            throw new ApiRuntimeException(
+                'Get version failed due to network error: ' . $e->getMessage(),
+                'GET_VERSION_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url,
+                'GET',
+                $transportResponse->getStatusCode() ?? null,
+                ['request_summary' => $request->getSummary()],
+                $e
+            );
+        }
     }
 
     /**
      * 获取Web API版本
      *
-     * @return string Web API版本号
-     * @throws ClientException 获取失败
+     * @param GetWebApiVersionRequest $request 获取Web API版本请求
+     * @return VersionResponse Web API版本响应
+     * @throws NetworkException 网络异常
+     * @throws ValidationException 验证异常
+     * @throws ApiRuntimeException API运行时异常
      */
-    public function getWebApiVersion(): string
+    public function getWebApiVersion(GetWebApiVersionRequest $request): VersionResponse
     {
-        $response = $this->transport->request('GET', '/api/v2/app/webapiVersion');
-        return $response['version'] ?? $response[0] ?? 'unknown';
-    }
-
-    /**
-     * 获取qBittorrent构建信息
-     *
-     * @return array 构建信息
-     * @throws ClientException 获取失败
-     */
-    public function getBuildInfo(): array
-    {
-        return $this->transport->request('GET', '/api/v2/app/buildInfo');
-    }
-
-    /**
-     * 获取应用程序偏好设置
-     *
-     * @param string|null $specificSetting 指定的偏好设置名称，null表示获取所有设置
-     * @return array 偏好设置
-     * @throws ClientException 获取失败
-     */
-    public function getPreferences(?string $specificSetting = null): array
-    {
-        if ($specificSetting !== null) {
-            $response = $this->transport->request('GET', '/api/v2/app/preferences', [
-                'query' => ['pref' => $specificSetting]
-            ]);
-            return [$specificSetting => $response[$specificSetting] ?? null];
+        // 验证请求
+        $validation = $request->validate();
+        if (!$validation->isValid()) {
+            throw ValidationException::fromValidationResult(
+                $validation,
+                'GetWebApiVersion request validation failed'
+            );
         }
 
-        return $this->transport->request('GET', '/api/v2/app/preferences');
-    }
-
-    /**
-     * 设置应用程序偏好设置
-     *
-     * @param array $preferences 偏好设置数组
-     * @return bool 设置是否成功
-     * @throws ClientException 设置失败
-     */
-    public function setPreferences(array $preferences): bool
-    {
-        $this->transport->request('POST', '/api/v2/app/setPreferences', [
-            'json' => [
-                'json' => json_encode($preferences, JSON_UNESCAPED_UNICODE)
-            ]
-        ]);
-
-        return true;
-    }
-
-    /**
-     * 获取默认保存路径
-     *
-     * @return string 默认保存路径
-     * @throws ClientException 获取失败
-     */
-    public function getDefaultSavePath(): string
-    {
-        $preferences = $this->getPreferences();
-        return $preferences['save_path'] ?? '';
-    }
-
-    /**
-     * 获取监听端口
-     *
-     * @return int 监听端口
-     * @throws ClientException 获取失败
-     */
-    public function getListeningPort(): int
-    {
-        $preferences = $this->getPreferences();
-        return (int) ($preferences['listen_port'] ?? 0);
-    }
-
-    /**
-     * 获取全局下载和上传速度限制
-     *
-     * @return array 速度限制信息
-     * @throws ClientException 获取失败
-     */
-    public function getGlobalSpeedLimits(): array
-    {
-        $preferences = $this->getPreferences();
-
-        return [
-            'dl_limit' => (int) ($preferences['dl_limit'] ?? 0),
-            'up_limit' => (int) ($preferences['up_limit'] ?? 0),
-            'dl_limit_alt' => (int) ($preferences['dl_limit_alt'] ?? 0),
-            'up_limit_alt' => (int) ($preferences['up_limit_alt'] ?? 0),
-            'alt_speed_enabled' => (bool) ($preferences['alt_speed_enabled'] ?? false),
-        ];
-    }
-
-    /**
-     * 获取DHT配置信息
-     *
-     * @return array DHT配置
-     * @throws ClientException 获取失败
-     */
-    public function getDHTConfiguration(): array
-    {
-        $preferences = $this->getPreferences();
-
-        return [
-            'dht' => (bool) ($preferences['dht'] ?? false),
-            'dht_port' => (int) ($preferences['dht_port'] ?? 6881),
-            'dont_enable_dht_when_private' => (bool) ($preferences['dont_enable_dht_when_private'] ?? true),
-        ];
-    }
-
-    /**
-     * 获取P2P配置信息
-     *
-     * @return array P2P配置
-     * @throws ClientException 获取失败
-     */
-    public function getP2PConfiguration(): array
-    {
-        $preferences = $this->getPreferences();
-
-        return [
-            'pex' => (bool) ($preferences['pex'] ?? true),
-            'lsd' => (bool) ($preferences['lsd'] ?? true),
-            'max_connec' => (int) ($preferences['max_connec'] ?? 500),
-            'max_connec_per_torrent' => (int) ($preferences['max_connec_per_torrent'] ?? 100),
-            'max_uploads' => (int) ($preferences['max_uploads'] ?? 100),
-            'max_uploads_per_torrent' => (int) ($preferences['max_uploads_per_torrent'] ?? 100),
-        ];
-    }
-
-    /**
-     * 获取代理配置
-     *
-     * @return array 代理配置
-     * @throws ClientException 获取失败
-     */
-    public function getProxyConfiguration(): array
-    {
-        $preferences = $this->getPreferences();
-
-        return [
-            'proxy_type' => (int) ($preferences['proxy_type'] ?? 0),
-            'proxy_ip' => $preferences['proxy_ip'] ?? '',
-            'proxy_port' => (int) ($preferences['proxy_port'] ?? 8080),
-            'proxy_peer_connections' => (bool) ($preferences['proxy_peer_connections'] ?? false),
-            'proxy_auth_enabled' => (bool) ($preferences['proxy_auth_enabled'] ?? false),
-            'proxy_username' => $preferences['proxy_username'] ?? '',
-            'proxy_password' => $preferences['proxy_password'] ?? '',
-            'proxy_hostname_lookup' => (bool) ($preferences['proxy_hostname_lookup'] ?? false),
-        ];
-    }
-
-    /**
-     * 获取磁盘缓存配置
-     *
-     * @return array 磁盘缓存配置
-     * @throws ClientException 获取失败
-     */
-    public function getDiskCacheConfiguration(): array
-    {
-        $preferences = $this->getPreferences();
-
-        return [
-            'disk_cache' => (int) ($preferences['disk_cache'] ?? 64),
-            'disk_cache_ttl' => (int) ($preferences['disk_cache_ttl'] ?? 60),
-            'os_cache' => (bool) ($preferences['os_cache'] ?? true),
-            'max_inactive_cache_time' => (int) ($preferences['max_inactive_cache_time'] ?? 30),
-        ];
-    }
-
-    /**
-     * 获取Web UI配置
-     *
-     * @return array Web UI配置
-     * @throws ClientException 获取失败
-     */
-    public function getWebUIConfiguration(): array
-    {
-        $preferences = $this->getPreferences();
-
-        return [
-            'web_ui_domain_list' => $preferences['web_ui_domain_list'] ?? '*',
-            'web_ui_address' => $preferences['web_ui_address'] ?? '*',
-            'web_ui_port' => (int) ($preferences['web_ui_port'] ?? 8080),
-            'web_ui_upnp' => (bool) ($preferences['web_ui_upnp'] ?? true),
-            'web_ui_username' => $preferences['web_ui_username'] ?? '',
-            'web_ui_password' => $preferences['web_ui_password'] ?? '',
-            'web_ui_csrf_protection_enabled' => (bool) ($preferences['web_ui_csrf_protection_enabled'] ?? true),
-            'web_ui_clickjacking_protection_enabled' => (bool) ($preferences['web_ui_clickjacking_protection_enabled'] ?? true),
-            'web_ui_secure_cookie_enabled' => (bool) ($preferences['web_ui_secure_cookie_enabled'] ?? true),
-            'web_ui_max_auth_fail_count' => (int) ($preferences['web_ui_max_auth_fail_count'] ?? 5),
-            'web_ui_ban_duration' => (int) ($preferences['web_ui_ban_duration'] ?? 3600),
-            'web_ui_session_timeout' => (int) ($preferences['web_ui_session_timeout'] ?? 3600),
-        ];
-    }
-
-    /**
-     * 获取高级设置配置
-     *
-     * @return array 高级设置配置
-     * @throws ClientException 获取失败
-     */
-    public function getAdvancedSettings(): array
-    {
-        $preferences = $this->getPreferences();
-
-        return [
-            'libtorrent_mode' => (int) ($preferences['libtorrent_mode'] ?? 0),
-            'add_trackers_enabled' => (bool) ($preferences['add_trackers_enabled'] ?? true),
-            'add_trackers' => $preferences['add_trackers'] ?? '',
-            'alternative_webui_enabled' => (bool) ($preferences['alternative_webui_enabled'] ?? false),
-            'alternative_webui_path' => $preferences['alternative_webui_path'] ?? '',
-            'current_network_interface' => $preferences['current_network_interface'] ?? '',
-            'save_path_changed' => (bool) ($preferences['save_path_changed'] ?? false),
-            'save_path_history' => $preferences['save_path_history'] ?? [],
-            'banned_IPs' => $preferences['banned_IPs'] ?? [],
-        ];
-    }
-
-    /**
-     * 关闭qBittorrent应用程序
-     *
-     * @param bool $force 是否强制关闭
-     * @return bool 关闭是否成功
-     * @throws ClientException 关闭失败
-     */
-    public function shutdown(bool $force = false): bool
-    {
         try {
-            $this->transport->request('POST', '/api/v2/app/shutdown', [
-                'form_params' => ['force' => $force ? 'true' : 'false']
-            ]);
-            return true;
-        } catch (ClientException $e) {
-            return false;
+            // 发送请求
+            $url = $this->getBasePath() . $request->getEndpoint();
+            $transportResponse = $this->transport->get(
+                $url,
+                $request->toArray(),
+                $request->getHeaders()
+            );
+
+            // 处理响应
+            return $this->handleVersionResponse($transportResponse, $request);
+
+        } catch (NetworkException $e) {
+            throw new ApiRuntimeException(
+                'Get Web API version failed due to network error: ' . $e->getMessage(),
+                'GET_WEB_API_VERSION_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url,
+                'GET',
+                $transportResponse->getStatusCode() ?? null,
+                ['request_summary' => $request->getSummary()],
+                $e
+            );
         }
     }
 
     /**
-     * 设置首选的文件协议
+     * 获取构建信息
      *
-     * @param string $protocol 协议名称 (如: 'http', 'https', 'ftp')
-     * @return bool 设置是否成功
-     * @throws ClientException 设置失败
+     * @param GetBuildInfoRequest $request 获取构建信息请求
+     * @return BuildInfoResponse 构建信息响应
+     * @throws NetworkException 网络异常
+     * @throws ValidationException 验证异常
+     * @throws ApiRuntimeException API运行时异常
      */
-    public function setFileProtocol(string $protocol): bool
+    public function getBuildInfo(GetBuildInfoRequest $request): BuildInfoResponse
     {
-        return $this->setPreferences(['file_protocol' => $protocol]);
+        // 验证请求
+        $validation = $request->validate();
+        if (!$validation->isValid()) {
+            throw ValidationException::fromValidationResult(
+                $validation,
+                'GetBuildInfo request validation failed'
+            );
+        }
+
+        try {
+            // 发送请求
+            $url = $this->getBasePath() . $request->getEndpoint();
+            $transportResponse = $this->transport->get(
+                $url,
+                $request->toArray(),
+                $request->getHeaders()
+            );
+
+            // 处理响应
+            return $this->handleBuildInfoResponse($transportResponse, $request);
+
+        } catch (NetworkException $e) {
+            throw new ApiRuntimeException(
+                'Get build info failed due to network error: ' . $e->getMessage(),
+                'GET_BUILD_INFO_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url,
+                'GET',
+                $transportResponse->getStatusCode() ?? null,
+                ['request_summary' => $request->getSummary()],
+                $e
+            );
+        }
     }
 
     /**
-     * 获取应用程序的完整状态摘要
+     * 处理版本响应
      *
-     * @return array 应用程序状态摘要
-     * @throws ClientException 获取失败
+     * @param \PhpQbittorrent\Contract\TransportResponse $transportResponse 传输响应
+     * @param GetVersionRequest|GetWebApiVersionRequest $request 请求对象
+     * @return VersionResponse 版本响应
      */
-    public function getApplicationStatus(): array
-    {
-        return [
-            'version' => $this->getVersion(),
-            'webapi_version' => $this->getWebApiVersion(),
-            'build_info' => $this->getBuildInfo(),
-            'default_save_path' => $this->getDefaultSavePath(),
-            'listening_port' => $this->getListeningPort(),
-            'speed_limits' => $this->getGlobalSpeedLimits(),
-        ];
+    private function handleVersionResponse(
+        \PhpQbittorrent\Contract\TransportResponse $transportResponse,
+        GetVersionRequest|GetWebApiVersionRequest $request
+    ): VersionResponse {
+        $statusCode = $transportResponse->getStatusCode();
+        $headers = $transportResponse->getHeaders();
+        $rawResponse = $transportResponse->getBody();
+
+        if ($statusCode === 200) {
+            try {
+                $version = $transportResponse->getBody(); // 版本通常是字符串格式
+                return VersionResponse::fromApiResponse($version, $headers, $statusCode, $rawResponse);
+            } catch (\Exception $e) {
+                return VersionResponse::failure(
+                    ['响应解析失败: ' . $e->getMessage()],
+                    $headers,
+                    $statusCode,
+                    $rawResponse
+                );
+            }
+        } else {
+            return VersionResponse::failure(
+                ["获取版本信息失败，状态码: {$statusCode}"],
+                $headers,
+                $statusCode,
+                $rawResponse
+            );
+        }
+    }
+
+    /**
+     * 处理构建信息响应
+     *
+     * @param \PhpQbittorrent\Contract\TransportResponse $transportResponse 传输响应
+     * @param GetBuildInfoRequest $request 请求对象
+     * @return BuildInfoResponse 构建信息响应
+     */
+    private function handleBuildInfoResponse(
+        \PhpQbittorrent\Contract\TransportResponse $transportResponse,
+        GetBuildInfoRequest $request
+    ): BuildInfoResponse {
+        $statusCode = $transportResponse->getStatusCode();
+        $headers = $transportResponse->getHeaders();
+        $rawResponse = $transportResponse->getBody();
+
+        if ($statusCode === 200) {
+            try {
+                $buildInfo = $transportResponse->getJson() ?? [];
+                return BuildInfoResponse::fromApiResponse($buildInfo, $headers, $statusCode, $rawResponse);
+            } catch (\Exception $e) {
+                return BuildInfoResponse::failure(
+                    ['响应解析失败: ' . $e->getMessage()],
+                    $headers,
+                    $statusCode,
+                    $rawResponse
+                );
+            }
+        } else {
+            return BuildInfoResponse::failure(
+                ["获取构建信息失败，状态码: {$statusCode}"],
+                $headers,
+                $statusCode,
+                $rawResponse
+            );
+        }
+    }
+
+    /**
+     * 创建通用响应对象
+     *
+     * @param \PhpQbittorrent\Contract\TransportResponse $transportResponse 传输响应
+     * @param array<string, mixed> $additionalData 额外数据
+     * @return \PhpQbittorrent\Contract\ResponseInterface 响应对象
+     */
+    private function createGenericResponse(
+        \PhpQbittorrent\Contract\TransportResponse $transportResponse,
+        array $additionalData = []
+    ): \PhpQbittorrent\Contract\ResponseInterface {
+        // 这里可以创建一个通用的响应对象
+        // 为了简化，我们创建一个简单的响应数组
+        return new class($transportResponse, $additionalData) implements \PhpQbittorrent\Contract\ResponseInterface {
+            private \PhpQbittorrent\Contract\TransportResponse $response;
+            private array $data;
+            private array $additionalData;
+
+            public function __construct(
+                \PhpQbittorrent\Contract\TransportResponse $response,
+                array $additionalData = []
+            ) {
+                $this->response = $response;
+                $this->data = $response->getJson() ?? [];
+                $this->additionalData = $additionalData;
+            }
+
+            public static function fromArray(array $data): static {
+                return new self(new class($data) implements \PhpQbittorrent\Contract\TransportResponse {
+                    private array $data;
+                    public function __construct(array $data) { $this->data = $data; }
+                    public function getStatusCode(): int { return $this->data['status_code'] ?? 200; }
+                    public function getHeaders(): array { return $this->data['headers'] ?? []; }
+                    public function getBody(): string { return $this->data['body'] ?? ''; }
+                    public function getJson(): ?array { return $this->data['json'] ?? null; }
+                    public function isSuccess(int ...$acceptableCodes): bool { return true; }
+                    public function isJson(): bool { return true; }
+                    public function getHeader(string $name): ?string { return null; }
+                }, $additionalData);
+            }
+
+            public function isSuccess(): bool { return $this->response->isSuccess(); }
+            public function getErrors(): array { return $this->additionalData['errors'] ?? []; }
+            public function getData(): mixed { return array_merge($this->data, $this->additionalData); }
+            public function getStatusCode(): int { return $this->response->getStatusCode(); }
+            public function getHeaders(): array { return $this->response->getHeaders(); }
+            public function getRawResponse(): string { return $this->response->getBody(); }
+            public function toArray(): array { return array_merge($this->data, $this->additionalData); }
+            public function jsonSerialize(): array { return $this->toArray(); }
+        };
     }
 }

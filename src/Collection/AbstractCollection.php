@@ -1,11 +1,11 @@
 <?php
 declare(strict_types=1);
 
-namespace Dongasai\qBittorrent\Collection;
+namespace PhpQbittorrent\Collection;
 
 use ArrayIterator;
 use Countable;
-use Dongasai\qBittorrent\Contract\CollectionInterface as CollectionContract;
+use PhpQbittorrent\Contract\CollectionInterface as CollectionContract;
 use IteratorAggregate;
 use JsonSerializable;
 use Traversable;
@@ -35,7 +35,7 @@ abstract class AbstractCollection implements IteratorAggregate, Countable, JsonS
      *
      * @return ArrayIterator 数组迭代器
      */
-    public function getIterator(): Traversable
+    public function getIterator(): \ArrayIterator
     {
         return new ArrayIterator($this->items);
     }
@@ -379,7 +379,7 @@ abstract class AbstractCollection implements IteratorAggregate, Countable, JsonS
      * @param static ...$collections 要连接的集合
      * @return static 连接后的新集合
      */
-    public function concat(static ...$collections): static
+    public function concat(self ...$collections): static
     {
         $items = $this->items;
         foreach ($collections as $collection) {

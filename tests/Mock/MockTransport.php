@@ -3,9 +3,9 @@ declare(strict_types=1);
 
 namespace Tests\Mock;
 
-use Dongasai\qBittorrent\Contract\TransportInterface;
-use Dongasai\qBittorrent\Contract\TransportResponse;
-use Dongasai\qBittorrent\Exception\NetworkException;
+use PhpQbittorrent\Contract\TransportInterface;
+use PhpQbittorrent\Contract\TransportResponse;
+use PhpQbittorrent\Exception\NetworkException;
 
 /**
  * 模拟传输层实现

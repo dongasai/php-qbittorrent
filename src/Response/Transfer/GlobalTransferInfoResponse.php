@@ -1,9 +1,9 @@
 <?php
 declare(strict_types=1);
 
-namespace Dongasai\qBittorrent\Response\Transfer;
+namespace PhpQbittorrent\Response\Transfer;
 
-use Dongasai\qBittorrent\Response\AbstractResponse;
+use PhpQbittorrent\Response\AbstractResponse;
 
 /**
  * 全局传输信息响应对象
@@ -32,33 +32,33 @@ class GlobalTransferInfoResponse extends AbstractResponse
     /**
      * 创建成功的全局传输信息响应
      *
-     * @param array<string, mixed> $transferInfo 传输信息
+     * @param array<string, mixed> $data 响应数据
      * @param array<string, string> $headers 响应头
      * @param int $statusCode HTTP状态码
      * @param string $rawResponse 原始响应内容
-     * @return self 全局传输信息响应实例
+     * @return static 全局传输信息响应实例
      */
     public static function success(
-        array $transferInfo,
+        array $data = [],
         array $headers = [],
         int $statusCode = 200,
         string $rawResponse = ''
-    ): self {
-        $instance = parent::success($transferInfo, $headers, $statusCode, $rawResponse);
+    ): static {
+        $instance = parent::success($data, $headers, $statusCode, $rawResponse);
 
-        $instance->dlInfoSpeed = $transferInfo['dl_info_speed'] ?? 0;
-        $instance->dlInfoData = $transferInfo['dl_info_data'] ?? 0;
-        $instance->upInfoSpeed = $transferInfo['up_info_speed'] ?? 0;
-        $instance->upInfoData = $transferInfo['up_info_data'] ?? 0;
-        $instance->dlRateLimit = $transferInfo['dl_rate_limit'] ?? 0;
-        $instance->upRateLimit = $transferInfo['up_rate_limit'] ?? 0;
-        $instance->dhtNodes = $transferInfo['dht_nodes'] ?? 0;
-        $instance->connectionStatus = $transferInfo['connection_status'] ?? 'disconnected';
+        $instance->dlInfoSpeed = $data['dl_info_speed'] ?? 0;
+        $instance->dlInfoData = $data['dl_info_data'] ?? 0;
+        $instance->upInfoSpeed = $data['up_info_speed'] ?? 0;
+        $instance->upInfoData = $data['up_info_data'] ?? 0;
+        $instance->dlRateLimit = $data['dl_rate_limit'] ?? 0;
+        $instance->upRateLimit = $data['up_rate_limit'] ?? 0;
+        $instance->dhtNodes = $data['dht_nodes'] ?? 0;
+        $instance->connectionStatus = $data['connection_status'] ?? 'disconnected';
 
         // 扩展信息（可选）
-        $instance->queueing = $transferInfo['queueing'] ?? false;
-        $instance->useAltSpeedLimits = $transferInfo['use_alt_speed_limits'] ?? false;
-        $instance->refreshInterval = $transferInfo['refresh_interval'] ?? 5000;
+        $instance->queueing = $data['queueing'] ?? false;
+        $instance->useAltSpeedLimits = $data['use_alt_speed_limits'] ?? false;
+        $instance->refreshInterval = $data['refresh_interval'] ?? 5000;
 
         return $instance;
     }
@@ -77,7 +77,7 @@ class GlobalTransferInfoResponse extends AbstractResponse
         array $headers = [],
         int $statusCode = 400,
         string $rawResponse = ''
-    ): self {
+    ): static {
         $instance = parent::failure($errors, $headers, $statusCode, $rawResponse);
 
         // 设置默认值

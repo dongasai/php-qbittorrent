@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Dongasai\qBittorrent\Model;
+namespace PhpQbittorrent\Model;
 
 use JsonSerializable;
 

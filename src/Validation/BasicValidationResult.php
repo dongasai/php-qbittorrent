@@ -1,9 +1,9 @@
 <?php
 declare(strict_types=1);
 
-namespace Dongasai\qBittorrent\Validation;
+namespace PhpQbittorrent\Validation;
 
-use Dongasai\qBittorrent\Contract\ValidationResult as ValidationResultContract;
+use PhpQbittorrent\Contract\ValidationResult as ValidationResultContract;
 
 /**
  * 基础验证结果实现

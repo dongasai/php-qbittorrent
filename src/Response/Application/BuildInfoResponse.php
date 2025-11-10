@@ -1,9 +1,9 @@
 <?php
 declare(strict_types=1);
 
-namespace Dongasai\qBittorrent\Response\Application;
+namespace PhpQbittorrent\Response\Application;
 
-use Dongasai\qBittorrent\Response\AbstractResponse;
+use PhpQbittorrent\Response\AbstractResponse;
 
 /**
  * 构建信息响应对象

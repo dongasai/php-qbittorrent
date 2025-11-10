@@ -14,6 +14,8 @@ class AuthenticationException extends ClientException
 {
     private ?string $username = null;
     private ?string $reason = null;
+    private string $errorCode;
+    private array $errorDetails = [];
 
     /**
      * @param string $message 错误消息
@@ -33,6 +35,8 @@ class AuthenticationException extends ClientException
     ) {
         parent::__construct($message, $errorCode, $errorDetails, 401, $previous);
 
+        $this->errorCode = $errorCode;
+        $this->errorDetails = $errorDetails;
         $this->username = $username;
         $this->reason = $reason;
 
@@ -53,6 +57,14 @@ class AuthenticationException extends ClientException
     public function getUsername(): ?string
     {
         return $this->username;
+    }
+
+    /**
+     * 获取错误代码
+     */
+    public function getErrorCode(): string
+    {
+        return $this->errorCode ?? 'UNKNOWN';
     }
 
     public function getReason(): ?string

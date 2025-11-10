@@ -4,13 +4,13 @@ declare(strict_types=1);
 namespace Tests\Integration\Auth;
 
 use PHPUnit\Framework\TestCase;
-use Dongasai\qBittorrent\API\v2\AuthAPI;
-use Dongasai\qBittorrent\Request\Auth\LoginRequest;
-use Dongasai\qBittorrent\Request\Auth\LogoutRequest;
-use Dongasai\qBittorrent\Response\Auth\LoginResponse;
-use Dongasai\qBittorrent\Response\Auth\LogoutResponse;
-use Dongasai\qBittorrent\Exception\NetworkException;
-use Dongasai\qBittorrent\Exception\ValidationException;
+use PhpQbittorrent\API\AuthAPI;
+use PhpQbittorrent\Request\Auth\LoginRequest;
+use PhpQbittorrent\Request\Auth\LogoutRequest;
+use PhpQbittorrent\Response\Auth\LoginResponse;
+use PhpQbittorrent\Response\Auth\LogoutResponse;
+use PhpQbittorrent\Exception\NetworkException;
+use PhpQbittorrent\Exception\ValidationException;
 use Tests\Mock\MockTransport;
 
 /**
@@ -127,7 +127,7 @@ class AuthAPIIntegrationTest extends TestCase
 
         $request = LoginRequest::create('testuser', 'testpass123');
 
-        $this->expectException(\Dongasai\qBittorrent\Exception\ApiRuntimeException::class);
+        $this->expectException(\PhpQbittorrent\Exception\ApiRuntimeException::class);
         $this->expectExceptionMessage('Login failed due to network error');
 
         $this->authAPI->login($request);

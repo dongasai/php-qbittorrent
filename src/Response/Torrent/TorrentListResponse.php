@@ -1,14 +1,14 @@
 <?php
 declare(strict_types=1);
 
-namespace Dongasai\qBittorrent\Response\Torrent;
+namespace PhpQbittorrent\Response\Torrent;
 
-use Dongasai\qBittorrent\Response\AbstractResponse;
-use Dongasai\qBittorrent\Contract\ValidationResult;
-use Dongasai\qBittorrent\Validation\BasicValidationResult;
-use Dongasai\qBittorrent\Model\TorrentInfoV2;
-use Dongasai\qBittorrent\Collection\TorrentCollection;
-use Dongasai\qBittorrent\Exception\ValidationException;
+use PhpQbittorrent\Response\AbstractResponse;
+use PhpQbittorrent\Contract\ValidationResult;
+use PhpQbittorrent\Validation\BasicValidationResult;
+use PhpQbittorrent\Model\TorrentInfo;
+use PhpQbittorrent\Collection\TorrentCollection;
+use PhpQbittorrent\Exception\ValidationException;
 
 /**
  * Torrent列表响应对象
@@ -50,24 +50,30 @@ class TorrentListResponse extends AbstractResponse
     /**
      * 创建成功的Torrent列表响应
      *
-     * @param TorrentCollection $torrents Torrent集合
+     * @param array $data 数据数组（兼容父类）
      * @param array<string, string> $headers 响应头
      * @param int $statusCode HTTP状态码
      * @param string $rawResponse 原始响应内容
-     * @param array<string, mixed> $statistics 统计信息
-     * @return self Torrent列表响应实例
+     * @return static Torrent列表响应实例
      */
     public static function success(
-        TorrentCollection $torrents,
+        array $data = [],
         array $headers = [],
         int $statusCode = 200,
-        string $rawResponse = '',
-        array $statistics = []
-    ): self {
-        $instance = parent::success([], $headers, $statusCode, $rawResponse);
-        $instance->torrents = $torrents;
-        $instance->totalCount = $torrents->count();
-        $instance->statistics = $statistics;
+        string $rawResponse = ''
+    ): static {
+        $instance = parent::success($data, $headers, $statusCode, $rawResponse);
+
+        // 处理TorrentCollection
+        if (isset($data['torrents']) && $data['torrents'] instanceof TorrentCollection) {
+            $instance->torrents = $data['torrents'];
+            $instance->totalCount = $data['torrents']->count();
+        } else {
+            $instance->torrents = new TorrentCollection();
+            $instance->totalCount = 0;
+        }
+
+        $instance->statistics = $data['statistics'] ?? [];
 
         return $instance;
     }
@@ -79,14 +85,14 @@ class TorrentListResponse extends AbstractResponse
      * @param array<string, string> $headers 响应头
      * @param int $statusCode HTTP状态码
      * @param string $rawResponse 原始响应内容
-     * @return self Torrent列表响应实例
+     * @return static Torrent列表响应实例
      */
     public static function failure(
         array $errors = [],
         array $headers = [],
         int $statusCode = 400,
         string $rawResponse = ''
-    ): self {
+    ): static {
         $instance = parent::failure($errors, $headers, $statusCode, $rawResponse);
         $instance->torrents = new TorrentCollection();
         $instance->totalCount = 0;
@@ -115,7 +121,7 @@ class TorrentListResponse extends AbstractResponse
             $torrents = TorrentCollection::fromArray($torrentsArray);
             $statistics = $responseData['statistics'] ?? [];
 
-            $instance = self::success($torrents, $headers, $statusCode, $rawResponse, $statistics);
+            $instance = self::success(['torrents' => $torrents, 'statistics' => $statistics], $headers, $statusCode, $rawResponse);
 
             // 设置请求参数信息
             $instance->filter = $responseData['filter'] ?? null;
@@ -262,9 +268,9 @@ class TorrentListResponse extends AbstractResponse
      * 根据哈希获取Torrent
      *
      * @param string $hash 哈希值
-     * @return TorrentInfoV2|null Torrent信息，未找到返回null
+     * @return TorrentInfo|null Torrent信息，未找到返回null
      */
-    public function getTorrentByHash(string $hash): ?TorrentInfoV2
+    public function getTorrentByHash(string $hash): ?TorrentInfo
     {
         return $this->torrents->findByHash($hash);
     }

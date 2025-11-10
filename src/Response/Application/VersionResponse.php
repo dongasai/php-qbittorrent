@@ -1,9 +1,9 @@
 <?php
 declare(strict_types=1);
 
-namespace Dongasai\qBittorrent\Response\Application;
+namespace PhpQbittorrent\Response\Application;
 
-use Dongasai\qBittorrent\Response\AbstractResponse;
+use PhpQbittorrent\Response\AbstractResponse;
 
 /**
  * 版本响应对象
@@ -14,7 +14,7 @@ class VersionResponse extends AbstractResponse
     private string $version;
 
     /**
-     * 创建成功的版本响应
+     * 创建版本响应（公共工厂方法）
      *
      * @param string $version 版本号
      * @param array<string, string> $headers 响应头
@@ -22,12 +22,31 @@ class VersionResponse extends AbstractResponse
      * @param string $rawResponse 原始响应内容
      * @return self 版本响应实例
      */
-    public static function success(
+    public static function create(
         string $version,
         array $headers = [],
         int $statusCode = 200,
         string $rawResponse = ''
     ): self {
+        return self::success(['version' => $version], $headers, $statusCode, $rawResponse);
+    }
+
+    /**
+     * 创建成功的版本响应
+     *
+     * @param array<string, mixed> $data 响应数据
+     * @param array<string, string> $headers 响应头
+     * @param int $statusCode HTTP状态码
+     * @param string $rawResponse 原始响应内容
+     * @return static 版本响应实例
+     */
+    protected static function success(
+        array $data = [],
+        array $headers = [],
+        int $statusCode = 200,
+        string $rawResponse = ''
+    ): static {
+        $version = $data['version'] ?? '';
         $instance = parent::success(['version' => $version], $headers, $statusCode, $rawResponse);
         $instance->version = $version;
 
@@ -41,14 +60,14 @@ class VersionResponse extends AbstractResponse
      * @param array<string, string> $headers 响应头
      * @param int $statusCode HTTP状态码
      * @param string $rawResponse 原始响应内容
-     * @return self 版本响应实例
+     * @return static 版本响应实例
      */
-    public static function failure(
+    protected static function failure(
         array $errors = [],
         array $headers = [],
         int $statusCode = 400,
         string $rawResponse = ''
-    ): self {
+    ): static {
         $instance = parent::failure($errors, $headers, $statusCode, $rawResponse);
         $instance->version = '';
 
@@ -72,9 +91,9 @@ class VersionResponse extends AbstractResponse
 
         if ($success) {
             $version = $responseData['version'] ?? '';
-            return self::success($version, $headers, $statusCode, $rawResponse);
+            return self::success(['version' => $version], $headers, $statusCode, $rawResponse);
         } else {
-            return self::failure($errors, $headers, $statusCode, $rawResponse);
+            return parent::failure($errors, $headers, $statusCode, $rawResponse);
         }
     }
 
