@@ -46,7 +46,7 @@ class DeleteTorrentsRequest extends AbstractRequest
             'deleteAll' => $deleteAll
         ]);
 
-        $this->setEndpoint('/torrents/delete')
+        $this->setEndpoint('/delete')
              ->setMethod('POST')
              ->setRequiresAuthentication(true);
     }

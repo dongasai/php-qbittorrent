@@ -150,14 +150,14 @@ class TorrentListResponse extends AbstractResponse
         $torrents = TorrentCollection::fromArray($torrentsData);
         $statistics = $torrents->getStatistics();
 
-        $instance = self::success($torrents, [], 200, json_encode($torrentsData), $statistics);
+        $instance = self::success(['torrents' => $torrents, 'statistics' => $statistics], [], 200, json_encode($torrentsData));
 
         // 设置请求参数信息
         $instance->filter = $requestParams['filter'] ?? null;
         $instance->category = $requestParams['category'] ?? null;
         $instance->tag = $requestParams['tag'] ?? null;
         $instance->sort = $requestParams['sort'] ?? null;
-        $instance->reverse = $requestParams['reverse'] ?? false;
+        $instance->reverse = ($requestParams['reverse'] ?? false) === 'true' || ($requestParams['reverse'] ?? false) === true;
         $instance->limit = $requestParams['limit'] ?? null;
         $instance->offset = $requestParams['offset'] ?? null;
 

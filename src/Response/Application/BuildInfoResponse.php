@@ -35,11 +35,12 @@ class BuildInfoResponse extends AbstractResponse
      * @return self 构建信息响应实例
      */
     public static function success(
-        array $buildInfo,
+        array $data = [],
         array $headers = [],
         int $statusCode = 200,
         string $rawResponse = ''
-    ): self {
+    ): static {
+        $buildInfo = $data;
         $instance = parent::success($buildInfo, $headers, $statusCode, $rawResponse);
         $instance->qt = $buildInfo['qt'] ?? '';
         $instance->libtorrent = $buildInfo['libtorrent'] ?? '';
@@ -64,7 +65,7 @@ class BuildInfoResponse extends AbstractResponse
         array $headers = [],
         int $statusCode = 400,
         string $rawResponse = ''
-    ): self {
+    ): static {
         $instance = parent::failure($errors, $headers, $statusCode, $rawResponse);
         $instance->qt = '';
         $instance->libtorrent = '';
@@ -163,6 +164,22 @@ class BuildInfoResponse extends AbstractResponse
     public function getBitness(): int
     {
         return $this->bitness;
+    }
+
+    /**
+     * 获取构建信息数组
+     *
+     * @return array<string, mixed> 构建信息
+     */
+    public function getBuildInfo(): array
+    {
+        return [
+            'qt' => $this->qt,
+            'libtorrent' => $this->libtorrent,
+            'boost' => $this->boost,
+            'openssl' => $this->openssl,
+            'bitness' => $this->bitness,
+        ];
     }
 
     /**

@@ -111,7 +111,7 @@ class TorrentAPI implements ApiInterface
         // 验证请求
         $validation = $request->validate();
         if (!$validation->isValid()) {
-            throw ValidationException::fromValidationResult(
+            throw \PhpQbittorrent\Exception\ValidationException::fromValidationResult(
                 $validation,
                 'GetTorrents request validation failed'
             );
@@ -611,5 +611,310 @@ class TorrentAPI implements ApiInterface
             public function toArray(): array { return array_merge($this->data, $this->additionalData); }
             public function jsonSerialize(): array { return $this->toArray(); }
         };
+    }
+
+    /**
+     * 重新校验Torrent
+     *
+     * @param string $hashes 种子哈希列表，用|分隔
+     * @return \PhpQbittorrent\Contract\ResponseInterface 校验响应
+     * @throws NetworkException 网络异常
+     * @throws ApiRuntimeException API运行时异常
+     */
+    public function recheckTorrents(string $hashes): \PhpQbittorrent\Contract\ResponseInterface
+    {
+        try {
+            $url = $this->getBasePath() . '/recheck';
+            $transportResponse = $this->transport->post(
+                $url,
+                ['hashes' => $hashes],
+                $this->getDefaultHeaders()
+            );
+
+            return $this->createGenericResponse($transportResponse);
+
+        } catch (NetworkException $e) {
+            throw new ApiRuntimeException(
+                'Recheck torrents failed due to network error: ' . $e->getMessage(),
+                'RECHECK_TORRENTS_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url,
+                'POST',
+                $transportResponse->getStatusCode() ?? null,
+                ['hashes' => $hashes],
+                $e
+            );
+        }
+    }
+
+    /**
+     * 设置Torrent位置
+     *
+     * @param string $hashes 种子哈希列表，用|分隔
+     * @param string $location 新位置
+     * @return \PhpQbittorrent\Contract\ResponseInterface 设置响应
+     * @throws NetworkException 网络异常
+     * @throws ApiRuntimeException API运行时异常
+     */
+    public function setTorrentLocation(string $hashes, string $location): \PhpQbittorrent\Contract\ResponseInterface
+    {
+        try {
+            $url = $this->getBasePath() . '/setLocation';
+            $transportResponse = $this->transport->post(
+                $url,
+                [
+                    'hashes' => $hashes,
+                    'location' => $location
+                ],
+                $this->getDefaultHeaders()
+            );
+
+            return $this->createGenericResponse($transportResponse);
+
+        } catch (NetworkException $e) {
+            throw new ApiRuntimeException(
+                'Set torrent location failed due to network error: ' . $e->getMessage(),
+                'SET_TORRENT_LOCATION_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url,
+                'POST',
+                $transportResponse->getStatusCode() ?? null,
+                ['hashes' => $hashes, 'location' => $location],
+                $e
+            );
+        }
+    }
+
+    /**
+     * 设置Torrent分类
+     *
+     * @param string $hashes 种子哈希列表，用|分隔
+     * @param string $category 分类名称
+     * @return \PhpQbittorrent\Contract\ResponseInterface 设置响应
+     * @throws NetworkException 网络异常
+     * @throws ApiRuntimeException API运行时异常
+     */
+    public function setTorrentCategory(string $hashes, string $category): \PhpQbittorrent\Contract\ResponseInterface
+    {
+        try {
+            $url = $this->getBasePath() . '/setCategory';
+            $transportResponse = $this->transport->post(
+                $url,
+                [
+                    'hashes' => $hashes,
+                    'category' => $category
+                ],
+                $this->getDefaultHeaders()
+            );
+
+            return $this->createGenericResponse($transportResponse);
+
+        } catch (NetworkException $e) {
+            throw new ApiRuntimeException(
+                'Set torrent category failed due to network error: ' . $e->getMessage(),
+                'SET_TORRENT_CATEGORY_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url,
+                'POST',
+                $transportResponse->getStatusCode() ?? null,
+                ['hashes' => $hashes, 'category' => $category],
+                $e
+            );
+        }
+    }
+
+    /**
+     * 添加Torrent标签
+     *
+     * @param string $hashes 种子哈希列表，用|分隔
+     * @param string $tags 标签列表，用逗号分隔
+     * @return \PhpQbittorrent\Contract\ResponseInterface 添加响应
+     * @throws NetworkException 网络异常
+     * @throws ApiRuntimeException API运行时异常
+     */
+    public function addTorrentTags(string $hashes, string $tags): \PhpQbittorrent\Contract\ResponseInterface
+    {
+        try {
+            $url = $this->getBasePath() . '/addTags';
+            $transportResponse = $this->transport->post(
+                $url,
+                [
+                    'hashes' => $hashes,
+                    'tags' => $tags
+                ],
+                $this->getDefaultHeaders()
+            );
+
+            return $this->createGenericResponse($transportResponse);
+
+        } catch (NetworkException $e) {
+            throw new ApiRuntimeException(
+                'Add torrent tags failed due to network error: ' . $e->getMessage(),
+                'ADD_TORRENT_TAGS_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url,
+                'POST',
+                $transportResponse->getStatusCode() ?? null,
+                ['hashes' => $hashes, 'tags' => $tags],
+                $e
+            );
+        }
+    }
+
+    /**
+     * 移除Torrent标签
+     *
+     * @param string $hashes 种子哈希列表，用|分隔
+     * @param string $tags 标签列表，用逗号分隔
+     * @return \PhpQbittorrent\Contract\ResponseInterface 移除响应
+     * @throws NetworkException 网络异常
+     * @throws ApiRuntimeException API运行时异常
+     */
+    public function removeTorrentTags(string $hashes, string $tags): \PhpQbittorrent\Contract\ResponseInterface
+    {
+        try {
+            $url = $this->getBasePath() . '/removeTags';
+            $transportResponse = $this->transport->post(
+                $url,
+                [
+                    'hashes' => $hashes,
+                    'tags' => $tags
+                ],
+                $this->getDefaultHeaders()
+            );
+
+            return $this->createGenericResponse($transportResponse);
+
+        } catch (NetworkException $e) {
+            throw new ApiRuntimeException(
+                'Remove torrent tags failed due to network error: ' . $e->getMessage(),
+                'REMOVE_TORRENT_TAGS_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url,
+                'POST',
+                $transportResponse->getStatusCode() ?? null,
+                ['hashes' => $hashes, 'tags' => $tags],
+                $e
+            );
+        }
+    }
+
+    /**
+     * 设置强制启动
+     *
+     * @param string $hashes 种子哈希列表，用|分隔
+     * @param bool $force 是否强制启动
+     * @return \PhpQbittorrent\Contract\ResponseInterface 设置响应
+     * @throws NetworkException 网络异常
+     * @throws ApiRuntimeException API运行时异常
+     */
+    public function setForceStart(string $hashes, bool $force = true): \PhpQbittorrent\Contract\ResponseInterface
+    {
+        try {
+            $url = $this->getBasePath() . '/setForceStart';
+            $transportResponse = $this->transport->post(
+                $url,
+                [
+                    'hashes' => $hashes,
+                    'value' => $force ? 'true' : 'false'
+                ],
+                $this->getDefaultHeaders()
+            );
+
+            return $this->createGenericResponse($transportResponse);
+
+        } catch (NetworkException $e) {
+            throw new ApiRuntimeException(
+                'Set force start failed due to network error: ' . $e->getMessage(),
+                'SET_FORCE_START_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url,
+                'POST',
+                $transportResponse->getStatusCode() ?? null,
+                ['hashes' => $hashes, 'force' => $force],
+                $e
+            );
+        }
+    }
+
+    /**
+     * 切换顺序下载
+     *
+     * @param string $hashes 种子哈希列表，用|分隔
+     * @return \PhpQbittorrent\Contract\ResponseInterface 切换响应
+     * @throws NetworkException 网络异常
+     * @throws ApiRuntimeException API运行时异常
+     */
+    public function toggleSequentialDownload(string $hashes): \PhpQbittorrent\Contract\ResponseInterface
+    {
+        try {
+            $url = $this->getBasePath() . '/toggleSequentialDownload';
+            $transportResponse = $this->transport->post(
+                $url,
+                ['hashes' => $hashes],
+                $this->getDefaultHeaders()
+            );
+
+            return $this->createGenericResponse($transportResponse);
+
+        } catch (NetworkException $e) {
+            throw new ApiRuntimeException(
+                'Toggle sequential download failed due to network error: ' . $e->getMessage(),
+                'TOGGLE_SEQUENTIAL_DOWNLOAD_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url,
+                'POST',
+                $transportResponse->getStatusCode() ?? null,
+                ['hashes' => $hashes],
+                $e
+            );
+        }
+    }
+
+    /**
+     * 设置首尾Piece优先级
+     *
+     * @param string $hashes 种子哈希列表，用|分隔
+     * @return \PhpQbittorrent\Contract\ResponseInterface 设置响应
+     * @throws NetworkException 网络异常
+     * @throws ApiRuntimeException API运行时异常
+     */
+    public function setFirstLastPiecePriority(string $hashes): \PhpQbittorrent\Contract\ResponseInterface
+    {
+        try {
+            $url = $this->getBasePath() . '/setFirstLastPiecePrio';
+            $transportResponse = $this->transport->post(
+                $url,
+                ['hashes' => $hashes],
+                $this->getDefaultHeaders()
+            );
+
+            return $this->createGenericResponse($transportResponse);
+
+        } catch (NetworkException $e) {
+            throw new ApiRuntimeException(
+                'Set first last piece priority failed due to network error: ' . $e->getMessage(),
+                'SET_FIRST_LAST_PIECE_PRIORITY_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url,
+                'POST',
+                $transportResponse->getStatusCode() ?? null,
+                ['hashes' => $hashes],
+                $e
+            );
+        }
+    }
+
+    /**
+     * 获取默认请求头
+     *
+     * @return array<string, string> 默认请求头
+     */
+    private function getDefaultHeaders(): array
+    {
+        return [
+            'Content-Type' => 'application/x-www-form-urlencoded',
+            'Accept' => 'application/json',
+        ];
     }
 }

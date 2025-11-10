@@ -40,7 +40,7 @@ class PauseTorrentsRequest extends AbstractRequest
             'pauseAll' => $pauseAll
         ]);
 
-        $this->setEndpoint('/torrents/stop')
+        $this->setEndpoint('/stop')
              ->setMethod('POST')
              ->setRequiresAuthentication(true);
     }

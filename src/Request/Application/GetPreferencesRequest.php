@@ -19,6 +19,11 @@ class GetPreferencesRequest extends AbstractRequest
         return 'GET';
     }
 
+    public function getEndpoint(): string
+    {
+        return '/preferences';
+    }
+
     public function getUri(): string
     {
         return '/api/v2/app/preferences';

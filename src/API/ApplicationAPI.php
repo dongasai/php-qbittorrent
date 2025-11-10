@@ -8,6 +8,7 @@ use PhpQbittorrent\Contract\TransportInterface;
 use PhpQbittorrent\Request\Application\GetVersionRequest;
 use PhpQbittorrent\Request\Application\GetWebApiVersionRequest;
 use PhpQbittorrent\Request\Application\GetBuildInfoRequest;
+use PhpQbittorrent\Request\Application\GetPreferencesRequest;
 use PhpQbittorrent\Response\Application\VersionResponse;
 use PhpQbittorrent\Response\Application\BuildInfoResponse;
 use PhpQbittorrent\Exception\NetworkException;
@@ -268,6 +269,79 @@ class ApplicationAPI implements ApiInterface
                 $statusCode,
                 $rawResponse
             );
+        }
+    }
+
+    /**
+     * 获取应用偏好设置
+     *
+     * @param GetPreferencesRequest $request 获取偏好设置请求
+     * @return \PhpQbittorrent\Contract\ResponseInterface 偏好设置响应
+     * @throws NetworkException 网络异常
+     * @throws ValidationException 验证异常
+     * @throws ApiRuntimeException API运行时异常
+     */
+    public function getPreferences(GetPreferencesRequest $request): \PhpQbittorrent\Contract\ResponseInterface
+    {
+        // 验证请求
+        $validation = $request->validate();
+        if (!$validation->isValid()) {
+            throw ValidationException::fromValidationResult(
+                $validation,
+                'GetPreferences request validation failed'
+            );
+        }
+
+        try {
+            // 发送请求
+            $url = $this->getBasePath() . $request->getEndpoint();
+            $transportResponse = $this->transport->get(
+                $url,
+                $request->toArray(),
+                $request->getHeaders()
+            );
+
+            // 处理响应
+            return $this->handlePreferencesResponse($transportResponse, $request);
+
+        } catch (NetworkException $e) {
+            throw new ApiRuntimeException(
+                'Get preferences failed due to network error: ' . $e->getMessage(),
+                'GET_PREFERENCES_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url,
+                'GET',
+                $transportResponse->getStatusCode() ?? null,
+                ['request_summary' => $request->getSummary()],
+                $e
+            );
+        }
+    }
+
+    /**
+     * 处理偏好设置响应
+     *
+     * @param \PhpQbittorrent\Contract\TransportResponse $transportResponse 传输响应
+     * @param GetPreferencesRequest $request 请求对象
+     * @return \PhpQbittorrent\Contract\ResponseInterface 偏好设置响应
+     */
+    private function handlePreferencesResponse(
+        \PhpQbittorrent\Contract\TransportResponse $transportResponse,
+        GetPreferencesRequest $request
+    ): \PhpQbittorrent\Contract\ResponseInterface {
+        $statusCode = $transportResponse->getStatusCode();
+        $headers = $transportResponse->getHeaders();
+        $rawResponse = $transportResponse->getBody();
+
+        if ($statusCode === 200) {
+            try {
+                $preferences = $transportResponse->getJson() ?? [];
+                return $this->createGenericResponse($transportResponse, ['preferences' => $preferences]);
+            } catch (\Exception $e) {
+                return $this->createGenericResponse($transportResponse, ['errors' => ['响应解析失败: ' . $e->getMessage()]]);
+            }
+        } else {
+            return $this->createGenericResponse($transportResponse, ['errors' => ["获取偏好设置失败，状态码: {$statusCode}"]]);
         }
     }
 

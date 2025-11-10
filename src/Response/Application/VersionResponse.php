@@ -41,12 +41,26 @@ class VersionResponse extends AbstractResponse
      * @return static 版本响应实例
      */
     protected static function success(
-        array $data = [],
+        array|string $data = [],
         array $headers = [],
         int $statusCode = 200,
         string $rawResponse = ''
     ): static {
-        $version = $data['version'] ?? '';
+        $version = '';
+        if (is_string($data)) {
+            $version = $data;
+        } elseif (is_array($data)) {
+            $version = $data['version'] ?? $data[0] ?? '';
+        }
+
+        // 如果版本是JSON编码的数组，尝试解析
+        if (is_string($version) && str_starts_with($version, '[') && str_ends_with($version, ']')) {
+            $decoded = json_decode($version, true);
+            if (is_array($decoded) && !empty($decoded)) {
+                $version = $decoded[0] ?? '';
+            }
+        }
+
         $instance = parent::success(['version' => $version], $headers, $statusCode, $rawResponse);
         $instance->version = $version;
 

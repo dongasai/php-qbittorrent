@@ -88,7 +88,7 @@ class AddTorrentRequest extends AbstractRequest
     {
         parent::__construct([]);
 
-        $this->setEndpoint('/torrents/add')
+        $this->setEndpoint('/add')
              ->setMethod('POST')
              ->setRequiresAuthentication(true);
     }

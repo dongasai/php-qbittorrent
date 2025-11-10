@@ -56,11 +56,11 @@ class GetTorrentsRequest extends AbstractRequest
     /**
      * 私有构造函数
      */
-    private function __construct()
+    public function __construct()
     {
         parent::__construct([]);
 
-        $this->setEndpoint('/torrents/info')
+        $this->setEndpoint('/info')
              ->setMethod('GET')
              ->setRequiresAuthentication(true);
     }
@@ -171,7 +171,7 @@ class GetTorrentsRequest extends AbstractRequest
      * @param TorrentFilter $filter 过滤条件
      * @return self 返回自身以支持链式调用
      */
-    private function setFilter(TorrentFilter $filter): self
+    public function setFilter(TorrentFilter $filter): self
     {
         $this->filter = $filter;
         return $this;
@@ -183,7 +183,7 @@ class GetTorrentsRequest extends AbstractRequest
      * @param string $category 分类名称
      * @return self 返回自身以支持链式调用
      */
-    private function setCategory(string $category): self
+    public function setCategory(string $category): self
     {
         $this->category = $category;
         return $this;
@@ -195,7 +195,7 @@ class GetTorrentsRequest extends AbstractRequest
      * @param string $tag 标签名称
      * @return self 返回自身以支持链式调用
      */
-    private function setTag(string $tag): self
+    public function setTag(string $tag): self
     {
         $this->tag = $tag;
         return $this;
@@ -207,7 +207,7 @@ class GetTorrentsRequest extends AbstractRequest
      * @param string $sort 排序字段
      * @return self 返回自身以支持链式调用
      */
-    private function setSort(string $sort): self
+    public function setSort(string $sort): self
     {
         $this->sort = $sort;
         return $this;
@@ -219,7 +219,7 @@ class GetTorrentsRequest extends AbstractRequest
      * @param bool $reverse 是否反向排序
      * @return self 返回自身以支持链式调用
      */
-    private function setReverse(bool $reverse): self
+    public function setReverse(bool $reverse): self
     {
         $this->reverse = $reverse;
         return $this;
@@ -231,7 +231,7 @@ class GetTorrentsRequest extends AbstractRequest
      * @param int $limit 限制数量
      * @return self 返回自身以支持链式调用
      */
-    private function setLimit(int $limit): self
+    public function setLimit(int $limit): self
     {
         $this->limit = $limit;
         return $this;
@@ -243,7 +243,7 @@ class GetTorrentsRequest extends AbstractRequest
      * @param int $offset 偏移量
      * @return self 返回自身以支持链式调用
      */
-    private function setOffset(int $offset): self
+    public function setOffset(int $offset): self
     {
         $this->offset = $offset;
         return $this;
@@ -255,7 +255,7 @@ class GetTorrentsRequest extends AbstractRequest
      * @param array<string> $hashes 哈希数组
      * @return self 返回自身以支持链式调用
      */
-    private function setHashes(array $hashes): self
+    public function setHashes(array $hashes): self
     {
         $this->hashes = $hashes;
         return $this;
