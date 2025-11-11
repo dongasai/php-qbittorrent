@@ -1101,7 +1101,8 @@ function testCategoriesAndTags(Client $client, array $addedHashes = []): array
             if (!empty($createdTags) && !empty($addedHashes)) {
                 $testHash = $addedHashes[0]; // 使用第一个测试种子
                 echo "     🔧 正在给测试种子添加标签: " . implode(', ', $createdTags) . "\n";
-                $torrentAPI->addTorrentTags([$testHash], $createdTags);
+                $tagsString = implode(',', $createdTags);
+                $torrentAPI->addTorrentTags($testHash, $tagsString);
 
                 // 验证标签是否添加成功
                 sleep(1);
@@ -1158,7 +1159,7 @@ function testCategoriesAndTags(Client $client, array $addedHashes = []): array
                 // 应用分类
                 if ($createdCategory) {
                     echo "     🔧 正在给测试种子设置分类: {$createdCategory}\n";
-                    $torrentAPI->setTorrentCategory([$testHash], $createdCategory);
+                    $torrentAPI->setTorrentCategory($testHash, $createdCategory);
                 }
 
                 // 验证关联是否成功
@@ -1381,8 +1382,14 @@ function testMagnetLinks(Client $client, array $config): array
         // 原有的检测逻辑作为后备
         if ($addedCount > 0) {
             echo "   🔍 回退到新增种子检测...\n";
-            $initialHashes = array_column($initialTorrents, 'hash');
-            $finalHashes = array_column($finalTorrents, 'hash');
+            $initialHashes = [];
+            foreach ($initialTorrents as $torrent) {
+                $initialHashes[] = $torrent->getHash();
+            }
+            $finalHashes = [];
+            foreach ($finalTorrents as $torrent) {
+                $finalHashes[] = $torrent->getHash();
+            }
             $newHashes = array_diff($finalHashes, $initialHashes);
 
             if (!empty($newHashes)) {
@@ -1471,7 +1478,7 @@ function testTorrentManagement(Client $client, array $addedHashes, array $config
         $testHash = $availableTestHashes[0];
         $testTorrent = null;
         foreach ($finalTorrents as $torrent) {
-            if ($torrent['hash'] === $testHash) {
+            if ($torrent->getHash() === $testHash) {
                 $testTorrent = $torrent;
                 break;
             }
@@ -1493,10 +1500,10 @@ function testTorrentManagement(Client $client, array $addedHashes, array $config
 /**
  * 测试具体的Torrent操作
  */
-function testTorrentOperations(object $torrentAPI, string $testHash, array $testTorrent, array $config): void
+function testTorrentOperations(object $torrentAPI, string $testHash, $testTorrent, array $config): void
 {
-    $originalState = $testTorrent['state'] ?? 'unknown';
-    echo "     测试torrent: " . ($testTorrent['name'] ?? 'Unknown') . "\n";
+    $originalState = $testTorrent->getState()->value ?? 'unknown';
+    echo "     测试torrent: " . ($testTorrent->getName() ?? 'Unknown') . "\n";
     echo "     初始状态: {$originalState}\n";
 
     try {
@@ -1536,15 +1543,17 @@ function testPauseAndResume(object $torrentAPI, string $testHash, string $origin
 {
     if ($originalState !== 'paused' && $originalState !== 'pausedDL' && $originalState !== 'pausedUP') {
         echo "     ⏸️  测试暂停...\n";
-        $pauseResult = $torrentAPI->pauseTorrents([$testHash]);
-        if ($pauseResult) {
+        $pauseRequest = \PhpQbittorrent\Request\Torrent\PauseTorrentsRequest::forHashes([$testHash]);
+        $pauseResult = $torrentAPI->pauseTorrents($pauseRequest);
+        if ($pauseResult && $pauseResult->isSuccess()) {
             echo "        ✅ 暂停成功\n";
             sleep(2);
             verifyTorrentState($torrentAPI, $testHash, "暂停后");
 
             echo "     ▶️  测试恢复...\n";
-            $resumeResult = $torrentAPI->resumeTorrents([$testHash]);
-            if ($resumeResult) {
+            $resumeRequest = new \PhpQbittorrent\Request\Torrent\ResumeTorrentsRequest($testHash);
+            $resumeResult = $torrentAPI->resumeTorrents($resumeRequest);
+            if ($resumeResult && $resumeResult->isSuccess()) {
                 echo "        ✅ 恢复成功\n";
                 sleep(2);
                 verifyTorrentState($torrentAPI, $testHash, "恢复后");
@@ -1556,8 +1565,9 @@ function testPauseAndResume(object $torrentAPI, string $testHash, string $origin
         }
     } else {
         echo "     ⏸️  当前已暂停，测试恢复...\n";
-        $resumeResult = $torrentAPI->resumeTorrents([$testHash]);
-        if ($resumeResult) {
+        $resumeRequest = new \PhpQbittorrent\Request\Torrent\ResumeTorrentsRequest($testHash);
+        $resumeResult = $torrentAPI->resumeTorrents($resumeRequest);
+        if ($resumeResult && $resumeResult->isSuccess()) {
             echo "        ✅ 恢复成功\n";
             sleep(2);
         } else {
@@ -1574,8 +1584,8 @@ function testRecheck(object $torrentAPI, string $testHash): void
     // 随机执行以节省时间
     if (rand(1, 3) === 1) {
         echo "     🔍 测试重新校验...\n";
-        $recheckResult = $torrentAPI->recheckTorrents([$testHash]);
-        if ($recheckResult) {
+        $recheckResult = $torrentAPI->recheckTorrents($testHash);
+        if ($recheckResult && $recheckResult->isSuccess()) {
             echo "        ✅ 重新校验已开始\n";
         } else {
             echo "        ❌ 重新校验失败\n";
@@ -1592,10 +1602,10 @@ function testMoveDirectory(object $torrentAPI, string $testHash, array $testTorr
         $customPath = $config['download_path'];
         echo "     📁 测试移动目录到: {$customPath}\n";
 
-        $originalPath = $testTorrent['save_path'] ?? '';
+        $originalPath = $testTorrent->getSavePath() ?? '';
         if ($originalPath !== $customPath) {
             $moveResult = $torrentAPI->setDownloadLocation([$testHash], $customPath);
-            if ($moveResult) {
+            if ($moveResult && $moveResult->isSuccess()) {
                 echo "        ✅ 移动目录成功\n";
                 sleep(1);
             } else {
@@ -1625,9 +1635,9 @@ function testTagManagement(object $torrentAPI, string $testHash): void
 {
     echo "     🏷️  测试添加标签...\n";
     $testTag = 'php-qbittorrent-test-' . date('Y-m-d');
-    $tagResult = $torrentAPI->addTorrentTags([$testHash], [$testTag]);
+    $tagResult = $torrentAPI->addTorrentTags($testHash, $testTag);
 
-    if ($tagResult) {
+    if ($tagResult && $tagResult->isSuccess()) {
         echo "        ✅ 标签添加成功: {$testTag}\n";
         verifyTagAdded($torrentAPI, $testHash, $testTag);
     } else {
@@ -1644,16 +1654,21 @@ function testCategoryManagement(object $torrentAPI, string $testHash): void
     $testCategory = 'php-qbittorrent-test';
 
     // 创建分类
-    $torrentAPI->createCategory($testCategory, '/downloads/test');
+    $createResult = $torrentAPI->createCategory($testCategory, '/downloads/test');
+    if ($createResult && $createResult->isSuccess()) {
+        echo "        ✅ 分类创建成功: {$testCategory}\n";
+        
+        // 添加torrent到分类
+        $categoryResult = $torrentAPI->setTorrentCategory($testHash, $testCategory);
 
-    // 添加torrent到分类
-    $categoryResult = $torrentAPI->setTorrentCategory([$testHash], $testCategory);
-
-    if ($categoryResult) {
-        echo "        ✅ 添加到分类成功: {$testCategory}\n";
-        verifyCategoryAdded($torrentAPI, $testHash, $testCategory);
+        if ($categoryResult && $categoryResult->isSuccess()) {
+            echo "        ✅ 添加到分类成功: {$testCategory}\n";
+            verifyCategoryAdded($torrentAPI, $testHash, $testCategory);
+        } else {
+            echo "        ❌ 添加到分类失败\n";
+        }
     } else {
-        echo "        ❌ 添加到分类失败\n";
+        echo "        ❌ 分类创建失败\n";
     }
 }
 
@@ -1665,8 +1680,8 @@ function verifyTorrentState(object $torrentAPI, string $testHash, string $contex
     $torrentListResponse = $torrentAPI->getTorrentList();
     $torrents = $torrentListResponse->getTorrents();
     foreach ($torrents as $torrent) {
-        if ($torrent['hash'] === $testHash) {
-            echo "        {$context}状态: " . ($torrent['state'] ?? 'unknown') . "\n";
+        if ($torrent->getHash() === $testHash) {
+            echo "        {$context}状态: " . ($torrent->getState()->value ?? 'unknown') . "\n";
             break;
         }
     }
@@ -1680,8 +1695,8 @@ function verifyTagAdded(object $torrentAPI, string $testHash, string $testTag): 
     $updatedTorrentListResponse = $torrentAPI->getTorrentList();
                 $updatedTorrents = $updatedTorrentListResponse->getTorrents();
     foreach ($updatedTorrents as $torrent) {
-        if ($torrent['hash'] === $testHash) {
-            $currentTags = $torrent['tags'] ?? '';
+        if ($torrent->getHash() === $testHash) {
+            $currentTags = $torrent->getTags() ?? '';
             if (str_contains($currentTags, $testTag)) {
                 echo "        ✅ 标签验证成功\n";
             } else {
@@ -1700,8 +1715,8 @@ function verifyCategoryAdded(object $torrentAPI, string $testHash, string $testC
     $categorizedTorrentListResponse = $torrentAPI->getTorrentList();
                 $categorizedTorrents = $categorizedTorrentListResponse->getTorrents();
     foreach ($categorizedTorrents as $torrent) {
-        if ($torrent['hash'] === $testHash) {
-            $currentCategory = $torrent['category'] ?? '';
+        if ($torrent->getHash() === $testHash) {
+            $currentCategory = $torrent->getCategory() ?? '';
             if ($currentCategory === $testCategory) {
                 echo "        ✅ 分类验证成功\n";
             } else {
@@ -1721,12 +1736,12 @@ function showFinalState(object $torrentAPI, string $testHash): void
     $finalTorrentListResponse = $torrentAPI->getTorrentList();
                 $finalTorrents = $finalTorrentListResponse->getTorrents();
     foreach ($finalTorrents as $torrent) {
-        if ($torrent['hash'] === $testHash) {
-            echo "        状态: " . ($torrent['state'] ?? 'unknown') . "\n";
-            echo "        进度: " . round(($torrent['progress'] ?? 0) * 100, 1) . "%\n";
-            echo "        分类: " . ($torrent['category'] ?? 'none') . "\n";
-            echo "        标签: " . ($torrent['tags'] ?? 'none') . "\n";
-            echo "        保存路径: " . ($torrent['save_path'] ?? 'unknown') . "\n";
+        if ($torrent->getHash() === $testHash) {
+            echo "        状态: " . ($torrent->getState()->value ?? 'unknown') . "\n";
+            echo "        进度: " . round(($torrent->getProgress() ?? 0) * 100, 1) . "%\n";
+            echo "        分类: " . ($torrent->getCategory() ?? 'none') . "\n";
+            echo "        标签: " . ($torrent->getTags() ?? 'none') . "\n";
+            echo "        保存路径: " . ($torrent->getSavePath() ?? 'unknown') . "\n";
             break;
         }
     }
@@ -2016,7 +2031,8 @@ function cleanupTestTorrents(Client $client, array $addedHashes): void
 
         foreach ($addedHashes as $hash) {
             try {
-                $torrentAPI->deleteTorrents([$hash], false); // 只删除torrent，不删除文件
+                $deleteRequest = \PhpQbittorrent\Request\Torrent\DeleteTorrentsRequest::forHashes([$hash], false);
+                $torrentAPI->deleteTorrents($deleteRequest);
                 echo "     🗑️ 已删除测试torrent: " . substr($hash, 0, 8) . "...\n";
             } catch (Exception $e) {
                 echo "     ❌ 删除torrent失败: " . $e->getMessage() . "\n";
@@ -2180,10 +2196,9 @@ try {
     // 14. 高级Torrent信息读取测试 (基于现有torrents)
     testAdvancedTorrentInfo($client, $torrents);
 
-    // 9. Torrent操作管理测试 (暂时跳过，需要更多API方法实现)
+    // 9. Torrent操作管理测试
     if (!empty($addedHashes)) {
-        // testTorrentManagement($client, $addedHashes, $config);
-        echo "🔧 9.1-9.12 Torrent管理操作测试: 跳过 (需要更多API方法实现)\n\n";
+        testTorrentManagement($client, $addedHashes, $config);
     }
 
     // 17. 错误处理测试 (暂时跳过)
