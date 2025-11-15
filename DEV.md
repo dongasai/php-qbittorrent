@@ -36,7 +36,7 @@
 - [x] **工厂模式** - 统一的对象创建
 - [x] **建造者模式** - 灵活的响应构建
 - [x] **配置管理** - 完善的配置系统
-- [x] **统一客户端** - 简化的使用接口
+- [x] **统一客户端** - 简化的使用接口，包含完整同步监控功能
 
 ### Phase 4: API 对象化 (100% 完成)
 - [x] **Torrent请求对象** - GetTorrentsRequest, AddTorrentRequest, DeleteTorrentsRequest等
@@ -46,10 +46,17 @@
 - [x] **Torrent API** - 完整的TorrentAPI实现
 - [x] **Torrent单元测试** - 完整的测试覆盖
 
+- [x] **Sync请求对象** - GetMainDataRequest, GetTorrentPeersRequest
+- [x] **Sync响应对象** - MainDataResponse, TorrentPeersResponse
+- [x] **Sync数据模型** - MainData, TorrentPeer, TorrentPeers
+- [x] **Sync API** - 完整的SyncAPI实现
+- [x] **Sync单元测试** - 完整的同步功能测试覆盖
+
 - [x] **Application API** - 版本、构建信息、偏好设置对象化
 - [x] **Transfer API** - 传输信息、速度限制对象化
 - [x] **RSS API** - RSS项目和Feed对象化
 - [x] **Search API** - 搜索结果和作业对象化
+- [x] **Sync API** - 主要数据同步和Peers连接监控对象化
 
 - [x] **SearchResult模型** - 评分算法和健康检查
 - [x] **SearchJob模型** - 搜索作业状态管理
@@ -139,6 +146,7 @@ php_qbittorrent/
 - **完整的对象化API**: 所有qBittorrent Web API的对象化封装
 - **强大的集合操作**: 支持复杂的过滤、排序、分组和统计
 - **智能搜索功能**: 内置评分算法和结果分析
+- **实时数据同步**: 支持增量更新和实时监控qBittorrent状态
 - **灵活的配置系统**: 支持多种配置源和环境变量
 - **统一的客户端接口**: 简化使用，同时保留底层控制能力
 - **完善的异常处理**: 详细的错误信息和恢复机制
@@ -249,6 +257,6 @@ composer test
 
 ---
 
-**最后更新**: 2025-11-10 01:30
+**最后更新**: 2025-11-16 00:30
 **文档版本**: 1.0
-**开发状态**: 重构完成，进入发布准备阶段
+**开发状态**: 同步API实现完成，进入发布准备阶段

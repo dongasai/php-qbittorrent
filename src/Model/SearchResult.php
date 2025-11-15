@@ -87,7 +87,7 @@ class SearchResult implements JsonSerializable
     public function getFormattedAddedTime(): string
     {
         if ($this->addedTime === null) return '未知';
-        return date('Y-m-d H:i:s', $this->addtime);
+        return date('Y-m-d H:i:s', $this->addedTime);
     }
 
     public function getFormattedRatio(): string

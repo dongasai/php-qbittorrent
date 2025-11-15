@@ -402,7 +402,7 @@ class UserInfo implements JsonSerializable
             return null;
         }
 
-        return floor((time() - $this->createdTime) / 86400);
+        return (int) floor((time() - $this->createdTime) / 86400);
     }
 
     /**

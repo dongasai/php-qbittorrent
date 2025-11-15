@@ -8,6 +8,7 @@ use PhpQbittorrent\API\TransferAPI;
 use PhpQbittorrent\API\TorrentAPI;
 use PhpQbittorrent\API\RSSAPI;
 use PhpQbittorrent\API\SearchAPI;
+use PhpQbittorrent\API\SyncAPI;
 use PhpQbittorrent\Contract\TransportInterface;
 use PhpQbittorrent\Transport\CurlTransport;
 use Nyholm\Psr7\Factory\Psr17Factory;
@@ -51,6 +52,9 @@ class Client
 
     /** @var SearchAPI|null 搜索API实例 */
     private ?SearchAPI $searchAPI = null;
+
+    /** @var SyncAPI|null 同步API实例 */
+    private ?SyncAPI $syncAPI = null;
 
     /**
      * 构造函数
@@ -115,11 +119,9 @@ class Client
     public function login(): bool
     {
         try {
-            $response = $this->transport->request('POST', '/api/v2/auth/login', [
-                'form_params' => [
-                    'username' => $this->username,
-                    'password' => $this->password,
-                ]
+            $response = $this->transport->post('/api/v2/auth/login', [
+                'username' => $this->username,
+                'password' => $this->password,
             ]);
 
             // 获取认证cookie并设置到传输层
@@ -173,7 +175,7 @@ class Client
         }
 
         try {
-            $response = $this->transport->request('POST', '/api/v2/auth/logout');
+            $response = $this->transport->post('/api/v2/auth/logout');
             $this->authenticated = false;
             return true; // 登出端点成功时返回空数组
         } catch (NetworkException $e) {
@@ -294,6 +296,23 @@ class Client
     }
 
     /**
+     * 获取同步API实例
+     *
+     * @return SyncAPI 同步API实例
+     * @throws AuthenticationException 认证异常
+     */
+    public function sync(): SyncAPI
+    {
+        $this->ensureAuthenticated();
+
+        if ($this->syncAPI === null) {
+            $this->syncAPI = new SyncAPI($this->transport);
+        }
+
+        return $this->syncAPI;
+    }
+
+    /**
      * 获取传输API实例（别名方法）
      *
      * @return TransferAPI 传输API实例
@@ -335,6 +354,17 @@ class Client
     public function getSearchAPI(): SearchAPI
     {
         return $this->search();
+    }
+
+    /**
+     * 获取同步API实例（别名方法）
+     *
+     * @return SyncAPI 同步API实例
+     * @throws AuthenticationException 认证异常
+     */
+    public function getSyncAPI(): SyncAPI
+    {
+        return $this->sync();
     }
 
     /**

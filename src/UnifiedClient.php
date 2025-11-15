@@ -471,6 +471,130 @@ class UnifiedClient
     }
 
     // ========================================
+    // 简化的同步相关方法
+    // ========================================
+
+    /**
+     * 获取主要数据同步
+     *
+     * @param int $rid 响应ID，用于增量更新
+     * @return array 主要数据
+     * @throws NetworkException 网络异常
+     * @throws AuthenticationException 认证异常
+     */
+    public function getMainData(int $rid = 0): array
+    {
+        $response = $this->client->sync()->getMainData($rid);
+        return $response->toArray();
+    }
+
+    /**
+     * 获取Torrent Peers数据
+     *
+     * @param string $hash Torrent哈希值
+     * @param int $rid 响应ID，用于增量更新
+     * @return array Peers数据
+     * @throws NetworkException 网络异常
+     * @throws AuthenticationException 认证异常
+     * @throws \InvalidArgumentException 当torrent哈希为空时抛出异常
+     */
+    public function getTorrentPeers(string $hash, int $rid = 0): array
+    {
+        $response = $this->client->sync()->getTorrentPeers($hash, $rid);
+        return $response->toArray();
+    }
+
+    /**
+     * 监控数据变化
+     *
+     * @param int $interval 监控间隔（秒）
+     * @param callable $callback 变化回调函数
+     * @throws \InvalidArgumentException 当参数无效时抛出异常
+     */
+    public function monitorChanges(int $interval = 5, callable $callback = null): void
+    {
+        if ($interval <= 0) {
+            throw new \InvalidArgumentException('监控间隔必须大于0');
+        }
+
+        $lastRid = 0;
+
+        while (true) {
+            try {
+                $mainData = $this->getMainData($lastRid);
+                $lastRid = $mainData['rid'];
+
+                if ($callback && is_callable($callback)) {
+                    $callback($mainData);
+                }
+
+                // 如果不是增量更新，说明数据有变化，可以记录日志
+                if ($mainData['full_update']) {
+                    // 记录完整更新
+                    error_log('收到完整更新数据，包含' . count($mainData['torrents']) . '个种子');
+                }
+            } catch (\Exception $e) {
+                error_log('监控过程中发生错误: ' . $e->getMessage());
+            }
+
+            sleep($interval);
+        }
+    }
+
+    /**
+     * 获取实时统计信息
+     *
+     * @return array 包含各种统计信息
+     * @throws NetworkException 网络异常
+     * @throws AuthenticationException 认证异常
+     */
+    public function getRealtimeStats(): array
+    {
+        $mainData = $this->getMainData();
+        $torrents = $mainData['torrents'] ?? [];
+
+        $stats = [
+            'timestamp' => time(),
+            'total_torrents' => count($torrents),
+            'active_torrents' => 0,
+            'downloading_torrents' => 0,
+            'seeding_torrents' => 0,
+            'paused_torrents' => 0,
+            'total_size' => 0,
+            'completed_size' => 0,
+            'total_download_speed' => 0,
+            'total_upload_speed' => 0,
+        ];
+
+        foreach ($torrents as $torrent) {
+            $state = $torrent['state'] ?? '';
+
+            if (in_array($state, ['downloading', 'uploading', 'forcedDL', 'forcedUP'])) {
+                $stats['active_torrents']++;
+            }
+
+            if ($state === 'downloading' || $state === 'forcedDL') {
+                $stats['downloading_torrents']++;
+            }
+
+            if ($state === 'uploading' || $state === 'forcedUP' || $state === 'stalledUP') {
+                $stats['seeding_torrents']++;
+            }
+
+            if ($state === 'pausedDL' || $state === 'pausedUP') {
+                $stats['paused_torrents']++;
+            }
+
+            $stats['total_size'] += $torrent['total_size'] ?? 0;
+            $stats['completed_size'] += $torrent['completed'] ?? 0;
+            $stats['total_download_speed'] += $torrent['dlspeed'] ?? 0;
+            $stats['total_upload_speed'] += $torrent['upspeed'] ?? 0;
+        }
+
+        return $stats;
+    }
+
+    // ========================================
     // 批量操作方法
     // ========================================
 

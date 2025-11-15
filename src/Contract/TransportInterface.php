@@ -104,6 +104,21 @@ interface TransportInterface
     public function setAuth(string $username, string $password): static;
 
     /**
+     * 设置认证信息
+     *
+     * @param string|null $cookie Cookie字符串
+     * @return void
+     */
+    public function setAuthentication(?string $cookie): void;
+
+    /**
+     * 获取认证信息
+     *
+     * @return string|null Cookie字符串
+     */
+    public function getAuthentication(): ?string;
+
+    /**
      * 设置Cookie
      *
      * @param string $cookie Cookie字符串
