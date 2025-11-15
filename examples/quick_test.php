@@ -1654,7 +1654,7 @@ function testTagManagement(object $torrentAPI, string $testHash): void
 function testCategoryManagement(object $torrentAPI, string $testHash): void
 {
     echo "     📂 测试添加到分类...\n";
-    $testCategory = 'php-qbittorrent-test';
+    $testCategory = 'phpqbittorrenttest';
 
     // 创建分类
     $createResult = $torrentAPI->createCategory($testCategory, '/downloads/test');
