@@ -28,7 +28,7 @@ class LogoutRequest extends AbstractRequest
     {
         parent::__construct([]);
 
-        $this->setEndpoint('/auth/logout')
+        $this->setEndpoint('/logout')
              ->setMethod('POST')
              ->setRequiresAuthentication(true);
     }

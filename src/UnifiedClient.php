@@ -358,6 +358,20 @@ class UnifiedClient
     }
 
     /**
+     * 添加Tracker到种子
+     *
+     * @param string $hash 种子哈希
+     * @param array<string> $urls Tracker URL列表
+     * @return bool 是否添加成功
+     */
+    public function addTrackers(string $hash, array $urls): bool
+    {
+        $request = RequestFactory::createAddTrackersRequest($hash, $urls);
+        $response = $this->client->torrents()->addTrackers($request);
+        return $response->isSuccess();
+    }
+
+    /**
      * 删除种子
      *
      * @param string $hashes 种子哈希（多个用|分隔）

@@ -46,6 +46,7 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+.env.testing
 config.local.php
 
 # 系统文件

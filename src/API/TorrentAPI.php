@@ -7,6 +7,7 @@ use PhpQbittorrent\Contract\ApiInterface;
 use PhpQbittorrent\Contract\TransportInterface;
 use PhpQbittorrent\Request\Torrent\GetTorrentsRequest;
 use PhpQbittorrent\Request\Torrent\AddTorrentRequest;
+use PhpQbittorrent\Request\Torrent\AddTrackersRequest;
 use PhpQbittorrent\Request\Torrent\DeleteTorrentsRequest;
 use PhpQbittorrent\Request\Torrent\PauseTorrentsRequest;
 use PhpQbittorrent\Request\Torrent\ResumeTorrentsRequest;
@@ -1703,6 +1704,87 @@ class TorrentAPI implements ApiInterface
                 null,
                 ['request_summary' => $request->getSummary()],
                 $e
+            );
+        }
+    }
+
+    /**
+     * 添加Tracker到Torrent
+     *
+     * @param AddTrackersRequest $request 添加Tracker请求
+     * @return \PhpQbittorrent\Contract\ResponseInterface 添加响应
+     * @throws NetworkException 网络异常
+     * @throws ValidationException 验证异常
+     * @throws ApiRuntimeException API运行时异常
+     */
+    public function addTrackers(AddTrackersRequest $request): \PhpQbittorrent\Contract\ResponseInterface
+    {
+        // 验证请求
+        $validation = $request->validate();
+        if (!$validation->isValid()) {
+            throw new ValidationException(
+                'AddTrackers request validation failed',
+                'VALIDATION_ERROR',
+                $validation->getErrors()
+            );
+        }
+
+        try {
+            $url = $this->getBasePath() . $request->getEndpoint();
+            $transportResponse = $this->transport->post(
+                $url,
+                $request->toArray(),
+                $request->getHeaders()
+            );
+
+            // 处理响应
+            return $this->handleAddTrackersResponse($transportResponse, $request);
+
+        } catch (NetworkException $e) {
+            throw new ApiRuntimeException(
+                'Add trackers failed due to network error: ' . $e->getMessage(),
+                'ADD_TRACKERS_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url ?? '',
+                'POST',
+                null,
+                ['request_summary' => $request->getSummary()],
+                $e
+            );
+        }
+    }
+
+    /**
+     * 处理添加Tracker响应
+     *
+     * @param \PhpQbittorrent\Contract\TransportResponse $transportResponse 传输响应
+     * @param AddTrackersRequest $request 请求对象
+     * @return \PhpQbittorrent\Contract\ResponseInterface 添加响应
+     */
+    private function handleAddTrackersResponse(
+        \PhpQbittorrent\Contract\TransportResponse $transportResponse,
+        AddTrackersRequest $request
+    ): \PhpQbittorrent\Contract\ResponseInterface {
+        $statusCode = $transportResponse->getStatusCode();
+        $headers = $transportResponse->getHeaders();
+        $rawResponse = $transportResponse->getBody();
+
+        if ($statusCode === 200) {
+            return $this->createGenericResponse($transportResponse);
+        } elseif ($statusCode === 404) {
+            return $this->createGenericResponse(
+                $transportResponse,
+                ['error' => 'Torrent不存在或哈希无效']
+            );
+        } elseif ($statusCode === 409) {
+            return $this->createGenericResponse(
+                $transportResponse,
+                ['error' => 'Tracker已存在或URL无效']
+            );
+        } else {
+            return $this->createGenericResponse(
+                $transportResponse,
+                ['error' => "添加Tracker失败，状态码: {$statusCode}"]
             );
         }
     }

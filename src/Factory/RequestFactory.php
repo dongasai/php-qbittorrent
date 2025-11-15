@@ -22,6 +22,7 @@ use PhpQbittorrent\Request\Transfer\BanPeersRequest;
 use PhpQbittorrent\Request\Torrent\GetTorrentsRequest;
 use PhpQbittorrent\Request\Torrent\GetTorrentInfoRequest;
 use PhpQbittorrent\Request\Torrent\AddTorrentRequest;
+use PhpQbittorrent\Request\Torrent\AddTrackersRequest;
 use PhpQbittorrent\Request\Torrent\DeleteTorrentsRequest;
 use PhpQbittorrent\Request\Torrent\PauseTorrentsRequest;
 use PhpQbittorrent\Request\Torrent\ResumeTorrentsRequest;
@@ -204,6 +205,11 @@ class RequestFactory
     public static function createRecheckTorrentsRequest(string $hashes): RecheckTorrentsRequest
     {
         return RecheckTorrentsRequest::create($hashes);
+    }
+
+    public static function createAddTrackersRequest(string $hash, array $urls): AddTrackersRequest
+    {
+        return AddTrackersRequest::create($hash, $urls);
     }
 
     /**
@@ -443,6 +449,10 @@ class RequestFactory
             'pause_torrents' => self::createPauseTorrentsRequest($parameters['hashes'] ?? ''),
             'resume_torrents' => self::createResumeTorrentsRequest($parameters['hashes'] ?? ''),
             'recheck_torrents' => self::createRecheckTorrentsRequest($parameters['hashes'] ?? ''),
+            'add_trackers' => self::createAddTrackersRequest(
+                $parameters['hash'] ?? '',
+                $parameters['urls'] ?? []
+            ),
 
             // RSS
             'get_all_rss_items' => self::createGetAllItemsRequest(

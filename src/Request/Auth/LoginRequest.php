@@ -46,7 +46,7 @@ class LoginRequest extends AbstractRequest
             'password' => $password
         ]);
 
-        $this->setEndpoint('/auth/login')
+        $this->setEndpoint('/login')
              ->setMethod('POST')
              ->setRequiresAuthentication(false);
     }
@@ -75,9 +75,11 @@ class LoginRequest extends AbstractRequest
         $validation = $request->validate();
 
         if (!$validation->isValid()) {
+            $errors = $validation->getErrors();
+            $message = !empty($errors) ? $errors[0] : 'Login request validation failed';
             throw ValidationException::fromValidationResult(
                 $validation,
-                'Login request validation failed'
+                $message
             );
         }
 

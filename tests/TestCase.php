@@ -17,7 +17,7 @@ use Nyholm\Psr7\Factory\Psr17Factory;
  */
 abstract class TestCase extends BaseTestCase
 {
-    protected Psr17Factory $factory;
+    protected ?Psr17Factory $factory = null;
 
     protected function setUp(): void
     {

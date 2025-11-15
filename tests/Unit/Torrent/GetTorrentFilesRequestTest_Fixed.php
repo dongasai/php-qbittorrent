@@ -89,11 +89,11 @@ class GetTorrentFilesRequestTest extends TestCase
     }
 
     /**
-     * 测试无效的哈希格式
+     * 测试无效的哈希格式 - 40位但包含非十六进制字符
      */
     public function testInvalidHashFormat(): void
     {
-        $request = GetTorrentFilesRequest::create('abcdef1234567890abcdef1234567890abcdef');
+        $request = GetTorrentFilesRequest::create('ggggggggggggggggggggggggggggggggxyz');
 
         $validation = $request->validate();
         $this->assertFalse($validation->isValid());
@@ -131,10 +131,10 @@ class GetTorrentFilesRequestTest extends TestCase
     public function testToArray(): void
     {
         $indexes = [0, 1, 2];
-        $request = GetTorrentFilesRequest::create('abcdef1234567890abcdef1234567890abcdef1234567890', $indexes);
+        $request = GetTorrentFilesRequest::create('abcdef1234567890abcdef1234567890abcdef12', $indexes);
 
         $expected = [
-            'hash' => 'abcdef1234567890abcdef1234567890abcdef1234567890',
+            'hash' => 'abcdef1234567890abcdef1234567890abcdef12',
             'indexes' => '0|1|2'
         ];
 
@@ -146,10 +146,10 @@ class GetTorrentFilesRequestTest extends TestCase
      */
     public function testToArrayWithoutIndexes(): void
     {
-        $request = GetTorrentFilesRequest::create('abcdef1234567890abcdef1234567890abcdef1234567890');
+        $request = GetTorrentFilesRequest::create('abcdef1234567890abcdef1234567890abcdef12');
 
         $expected = [
-            'hash' => 'abcdef1234567890abcdef1234567890abcdef1234567890'
+            'hash' => 'abcdef1234567890abcdef1234567890abcdef12'
         ];
 
         $this->assertEquals($expected, $request->toArray());
