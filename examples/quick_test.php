@@ -984,8 +984,25 @@ function testCategoriesAndTags(Client $client, array $addedHashes = []): array
             $testCategoryName = 'test_category_' . date('His');
             $testPath = '/tmp/test_downloads';
 
+            // 优化：创建前先检查分类是否存在
+            echo "     🔍 检查分类是否存在: {$testCategoryName}\n";
+            $existingCategories = $torrentAPI->getCategories();
+            
+            if (is_array($existingCategories) && isset($existingCategories[$testCategoryName])) {
+                echo "     ⚠️  分类已存在，先删除再创建: {$testCategoryName}\n";
+                
+                // 删除已存在的分类
+                $removeResult = $torrentAPI->removeCategories($testCategoryName);
+                if ($removeResult && $removeResult->isSuccess()) {
+                    echo "     ✅ 已存在的分类删除成功\n";
+                    sleep(1); // 等待删除完成
+                } else {
+                    echo "     ❌ 已存在的分类删除失败，继续尝试创建\n";
+                }
+            }
+
             echo "     🔧 正在创建分类: {$testCategoryName}\n";
-            $torrentAPI->createCategory($testCategoryName, $testPath);
+            $createResult = $torrentAPI->createCategory($testCategoryName, $testPath);
 
             // 验证创建是否成功
             sleep(1); // 等待创建完成
@@ -998,6 +1015,11 @@ function testCategoriesAndTags(Client $client, array $addedHashes = []): array
                 $testResults['7.2'] = 'success';
             } else {
                 echo "     ❌ 7.2 分类创建失败: 未在列表中找到\n";
+                // 提供更详细的错误信息
+                if ($createResult) {
+                    echo "        HTTP状态码: " . ($createResult->getStatusCode() ?? 'Unknown') . "\n";
+                    echo "        错误信息: " . ($createResult->getErrorMessage() ?? 'None') . "\n";
+                }
                 $testResults['7.2'] = 'failure';
             }
         } catch (Exception $e) {
@@ -1110,14 +1132,14 @@ function testCategoriesAndTags(Client $client, array $addedHashes = []): array
                 $updatedTorrents = $updatedTorrentListResponse->getTorrents();
                 $foundTorrent = null;
                 foreach ($updatedTorrents as $torrent) {
-                    if ($torrent['hash'] === $testHash) {
+                    if ($torrent->getHash() === $testHash) {
                         $foundTorrent = $torrent;
                         break;
                     }
                 }
 
-                if ($foundTorrent && !empty($foundTorrent['tags'])) {
-                    $appliedTags = explode(', ', $foundTorrent['tags']);
+                if ($foundTorrent && !empty($foundTorrent->getTags())) {
+                    $appliedTags = explode(', ', $foundTorrent->getTags());
                     $matchCount = 0;
                     foreach ($createdTags as $tag) {
                         if (in_array($tag, $appliedTags)) {
@@ -1168,7 +1190,7 @@ function testCategoriesAndTags(Client $client, array $addedHashes = []): array
                 $finalTorrents = $finalTorrentListResponse->getTorrents();
                 $finalTorrent = null;
                 foreach ($finalTorrents as $torrent) {
-                    if ($torrent['hash'] === $testHash) {
+                    if ($torrent->getHash() === $testHash) {
                         $finalTorrent = $torrent;
                         break;
                     }
@@ -1176,8 +1198,8 @@ function testCategoriesAndTags(Client $client, array $addedHashes = []): array
 
                 if ($finalTorrent) {
                     echo "     ✅ 7.7 分类标签关联测试完成\n";
-                    echo "     📂 种子分类: " . ($finalTorrent['category'] ?? 'none') . "\n";
-                    echo "     🏷️  种子标签: " . ($finalTorrent['tags'] ?? 'none') . "\n";
+                    echo "     📂 种子分类: " . ($finalTorrent->getCategory() ?? 'none') . "\n";
+                    echo "     🏷️  种子标签: " . ($finalTorrent->getTags() ?? 'none') . "\n";
                     $testResults['7.7'] = 'success';
                 } else {
                     echo "     ❌ 7.7 分类标签关联测试失败: 未找到测试种子\n";
@@ -1656,14 +1678,32 @@ function testCategoryManagement(object $torrentAPI, string $testHash): void
     echo "     📂 测试添加到分类...\n";
     $testCategory = 'phpqbittorrenttest';
 
+    // 优化：创建前先检查分类是否存在
+    echo "        🔍 检查分类是否存在: {$testCategory}\n";
+    $categories = $torrentAPI->getCategories();
+    
+    if (is_array($categories) && isset($categories[$testCategory])) {
+        echo "        ⚠️  分类已存在，先删除再创建: {$testCategory}\n";
+        
+        // 删除已存在的分类
+        $removeResult = $torrentAPI->removeCategories($testCategory);
+        if ($removeResult && $removeResult->isSuccess()) {
+            echo "        ✅ 已存在的分类删除成功\n";
+            sleep(1); // 等待删除完成
+        } else {
+            echo "        ❌ 已存在的分类删除失败，继续尝试创建\n";
+        }
+    }
+
     // 创建分类
+    echo "        🏗️  创建分类: {$testCategory}\n";
     $createResult = $torrentAPI->createCategory($testCategory, '/downloads/test');
     if ($createResult && $createResult->isSuccess()) {
         echo "        ✅ 分类创建成功: {$testCategory}\n";
         
         // 添加torrent到分类
         $categoryResult = $torrentAPI->setTorrentCategory($testHash, $testCategory);
-
+        
         if ($categoryResult && $categoryResult->isSuccess()) {
             echo "        ✅ 添加到分类成功: {$testCategory}\n";
             verifyCategoryAdded($torrentAPI, $testHash, $testCategory);
@@ -1672,6 +1712,11 @@ function testCategoryManagement(object $torrentAPI, string $testHash): void
         }
     } else {
         echo "        ❌ 分类创建失败\n";
+        // 提供更详细的错误信息
+        if ($createResult) {
+            echo "           HTTP状态码: " . ($createResult->getStatusCode() ?? 'Unknown') . "\n";
+            echo "           错误信息: " . ($createResult->getData()['error'] ?? 'None') . "\n";
+        }
     }
 }
 
