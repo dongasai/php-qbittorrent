@@ -124,6 +124,22 @@ class ValidationException extends ClientException
     }
 
     /**
+     * 从验证结果创建异常
+     */
+    public static function fromValidationResult(
+        \PhpQbittorrent\Contract\ValidationResult $validationResult,
+        string $message = 'Validation failed'
+    ): self {
+        return new self(
+            $message,
+            'VALIDATION_ERROR',
+            $validationResult->getErrors(),
+            null,
+            ['validation_errors' => $validationResult->getErrors()]
+        );
+    }
+
+    /**
      * 创建参数格式无效异常
      */
     public static function invalidFormat(

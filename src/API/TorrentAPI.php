@@ -10,7 +10,15 @@ use PhpQbittorrent\Request\Torrent\AddTorrentRequest;
 use PhpQbittorrent\Request\Torrent\DeleteTorrentsRequest;
 use PhpQbittorrent\Request\Torrent\PauseTorrentsRequest;
 use PhpQbittorrent\Request\Torrent\ResumeTorrentsRequest;
+use PhpQbittorrent\Request\Torrent\GetTorrentPropertiesRequest;
+use PhpQbittorrent\Request\Torrent\GetTorrentTrackersRequest;
+use PhpQbittorrent\Request\Torrent\GetTorrentWebSeedsRequest;
+use PhpQbittorrent\Request\Torrent\GetTorrentPieceStatesRequest;
 use PhpQbittorrent\Response\Torrent\TorrentListResponse;
+use PhpQbittorrent\Response\Torrent\TorrentPropertiesResponse;
+use PhpQbittorrent\Response\Torrent\TorrentTrackersResponse;
+use PhpQbittorrent\Response\Torrent\TorrentWebSeedsResponse;
+use PhpQbittorrent\Response\Torrent\TorrentPieceStatesResponse;
 use PhpQbittorrent\Exception\NetworkException;
 use PhpQbittorrent\Exception\ApiRuntimeException;
 use PhpQbittorrent\Exception\ValidationException;
@@ -911,14 +919,62 @@ class TorrentAPI implements ApiInterface
     }
 
     /**
-     * 获取种子属性
+     * 获取种子属性（使用类型化请求）
+     *
+     * @param GetTorrentPropertiesRequest $request 获取Torrent属性请求
+     * @return TorrentPropertiesResponse Torrent属性响应
+     * @throws NetworkException 网络异常
+     * @throws ValidationException 验证异常
+     * @throws ApiRuntimeException API运行时异常
+     */
+    public function getTorrentProperties(GetTorrentPropertiesRequest $request): TorrentPropertiesResponse
+    {
+        // 验证请求
+        $validation = $request->validate();
+        if (!$validation->isValid()) {
+            throw new ValidationException(
+                'GetTorrentProperties request validation failed',
+                'VALIDATION_ERROR',
+                $validation->getErrors()
+            );
+        }
+
+        try {
+            // 发送请求
+            $url = $this->getBasePath() . $request->getEndpoint();
+            $transportResponse = $this->transport->get(
+                $url,
+                $request->toArray(),
+                $request->getHeaders()
+            );
+
+            // 处理响应
+            return $this->handleTorrentPropertiesResponse($transportResponse, $request);
+
+        } catch (NetworkException $e) {
+            throw new ApiRuntimeException(
+                'Get torrent properties failed due to network error: ' . $e->getMessage(),
+                'GET_TORRENT_PROPERTIES_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url ?? '',
+                'GET',
+                null,
+                ['request_summary' => $request->getSummary()],
+                $e
+            );
+        }
+    }
+
+    /**
+     * 获取种子属性（兼容方法）
      *
      * @param string $hash 种子哈希
      * @return array<string, mixed> 种子属性
      * @throws NetworkException 网络异常
+     * @throws ValidationException 验证异常
      * @throws ApiRuntimeException API运行时异常
      */
-    public function getTorrentProperties(string $hash): array
+    public function getTorrentPropertiesLegacy(string $hash): array
     {
         try {
             $url = $this->getBasePath() . '/properties';
@@ -944,6 +1000,156 @@ class TorrentAPI implements ApiInterface
                 $transportResponse->getStatusCode() ?? null,
                 ['hash' => $hash],
                 $e
+            );
+        }
+    }
+
+    /**
+     * 处理Torrent Web种子响应
+     *
+     * @param \PhpQbittorrent\Contract\TransportResponse $transportResponse 传输响应
+     * @param GetTorrentWebSeedsRequest $request 请求对象
+     * @return TorrentWebSeedsResponse Torrent Web种子响应
+     */
+    private function handleTorrentWebSeedsResponse(
+        \PhpQbittorrent\Contract\TransportResponse $transportResponse,
+        GetTorrentWebSeedsRequest $request
+    ): TorrentWebSeedsResponse {
+        $statusCode = $transportResponse->getStatusCode();
+        $headers = $transportResponse->getHeaders();
+        $rawResponse = $transportResponse->getBody();
+
+        if ($statusCode === 200) {
+            try {
+                $webSeedsData = $transportResponse->getJson() ?? [];
+                return TorrentWebSeedsResponse::fromApiResponse(
+                    [
+                        'data' => $webSeedsData,
+                        'headers' => $headers,
+                        'status_code' => $statusCode,
+                        'body' => $rawResponse
+                    ],
+                    $request->getHash()
+                );
+            } catch (\Exception $e) {
+                return TorrentWebSeedsResponse::error(
+                    $headers,
+                    $statusCode,
+                    $rawResponse,
+                    '响应解析失败: ' . $e->getMessage()
+                );
+            }
+        } elseif ($statusCode === 404) {
+            return TorrentWebSeedsResponse::error(
+                $headers,
+                $statusCode,
+                $rawResponse,
+                'Torrent不存在或哈希无效'
+            );
+        } else {
+            return TorrentWebSeedsResponse::error(
+                $headers,
+                $statusCode,
+                $rawResponse,
+                "获取Torrent Web种子失败，状态码: {$statusCode}"
+            );
+        }
+    }
+
+    /**
+     * 处理Torrent Trackers响应
+     *
+     * @param \PhpQbittorrent\Contract\TransportResponse $transportResponse 传输响应
+     * @param GetTorrentTrackersRequest $request 请求对象
+     * @return TorrentTrackersResponse Torrent Trackers响应
+     */
+    private function handleTorrentTrackersResponse(
+        \PhpQbittorrent\Contract\TransportResponse $transportResponse,
+        GetTorrentTrackersRequest $request
+    ): TorrentTrackersResponse {
+        $statusCode = $transportResponse->getStatusCode();
+        $headers = $transportResponse->getHeaders();
+        $rawResponse = $transportResponse->getBody();
+
+        if ($statusCode === 200) {
+            try {
+                $trackersData = $transportResponse->getJson() ?? [];
+                return TorrentTrackersResponse::fromApiData(
+                    $trackersData,
+                    $headers,
+                    $statusCode,
+                    $rawResponse
+                );
+            } catch (\Exception $e) {
+                return TorrentTrackersResponse::failure(
+                    ['响应解析失败: ' . $e->getMessage()],
+                    $headers,
+                    $statusCode,
+                    $rawResponse
+                );
+            }
+        } elseif ($statusCode === 404) {
+            return TorrentTrackersResponse::failure(
+                ['Torrent不存在或哈希无效'],
+                $headers,
+                $statusCode,
+                $rawResponse
+            );
+        } else {
+            return TorrentTrackersResponse::failure(
+                ["获取Torrent Trackers失败，状态码: {$statusCode}"],
+                $headers,
+                $statusCode,
+                $rawResponse
+            );
+        }
+    }
+
+    /**
+     * 处理Torrent属性响应
+     *
+     * @param \PhpQbittorrent\Contract\TransportResponse $transportResponse 传输响应
+     * @param GetTorrentPropertiesRequest $request 请求对象
+     * @return TorrentPropertiesResponse Torrent属性响应
+     */
+    private function handleTorrentPropertiesResponse(
+        \PhpQbittorrent\Contract\TransportResponse $transportResponse,
+        GetTorrentPropertiesRequest $request
+    ): TorrentPropertiesResponse {
+        $statusCode = $transportResponse->getStatusCode();
+        $headers = $transportResponse->getHeaders();
+        $rawResponse = $transportResponse->getBody();
+
+        if ($statusCode === 200) {
+            try {
+                $propertiesData = $transportResponse->getJson() ?? [];
+                return TorrentPropertiesResponse::fromApiData(
+                    $propertiesData,
+                    $headers,
+                    $statusCode,
+                    $rawResponse
+                );
+            } catch (\Exception $e) {
+                return TorrentPropertiesResponse::failure(
+                    ['响应解析失败: ' . $e->getMessage()],
+                    $headers,
+                    $statusCode,
+                    $rawResponse
+                );
+            }
+        } elseif ($statusCode === 404) {
+            return TorrentPropertiesResponse::failure(
+                ['Torrent不存在或哈希无效'],
+                $headers,
+                $statusCode,
+                $rawResponse
+            );
+        } else {
+            return TorrentPropertiesResponse::failure(
+                ["获取Torrent属性失败，状态码: {$statusCode}"],
+                $headers,
+                $statusCode,
+                $rawResponse
             );
         }
     }
@@ -1286,6 +1492,113 @@ class TorrentAPI implements ApiInterface
     }
 
     /**
+     * 获取Torrent Piece状态
+     *
+     * @param GetTorrentPieceStatesRequest $request Piece状态请求
+     * @return TorrentPieceStatesResponse Piece状态响应
+     * @throws NetworkException 网络异常
+     * @throws ValidationException 验证异常
+     * @throws ApiRuntimeException API运行时异常
+     */
+    public function getTorrentPieceStates(GetTorrentPieceStatesRequest $request): TorrentPieceStatesResponse
+    {
+        // 验证请求
+        $validation = $request->validate();
+        if (!$validation->isValid()) {
+            throw new ValidationException(
+                'GetTorrentPieceStates request validation failed',
+                'VALIDATION_ERROR',
+                $validation->getErrors()
+            );
+        }
+
+        try {
+            // 发送请求
+            $url = $this->getBasePath() . $request->getEndpoint();
+            $transportResponse = $this->transport->get(
+                $url,
+                $request->toArray(),
+                $request->getHeaders()
+            );
+
+            // 处理Piece状态响应
+            return $this->handleTorrentPieceStatesResponse($transportResponse, $request);
+
+        } catch (NetworkException $e) {
+            throw new ApiRuntimeException(
+                'Get torrent piece states failed due to network error: ' . $e->getMessage(),
+                'GET_TORRENT_PIECE_STATES_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url ?? '',
+                'GET',
+                null,
+                ['request_summary' => $request->getSummary()],
+                $e
+            );
+        }
+    }
+
+    /**
+     * 处理Torrent Piece状态API响应
+     *
+     * @param \PhpQbittorrent\Contract\TransportResponseInterface $transportResponse 传输响应
+     * @param GetTorrentPieceStatesRequest $request 原始请求
+     * @return TorrentPieceStatesResponse Piece状态响应
+     * @throws ApiRuntimeException API处理异常
+     */
+    private function handleTorrentPieceStatesResponse(
+        \PhpQbittorrent\Contract\TransportResponseInterface $transportResponse,
+        GetTorrentPieceStatesRequest $request
+    ): TorrentPieceStatesResponse {
+        $statusCode = $transportResponse->getStatusCode();
+        $responseData = $transportResponse->getBody();
+
+        // 检查HTTP状态码
+        if ($statusCode === 404) {
+            return TorrentPieceStatesResponse::error(
+                $responseData,
+                [],
+                'Torrent not found'
+            );
+        }
+
+        if ($statusCode < 200 || $statusCode >= 300) {
+            throw new ApiRuntimeException(
+                "Get torrent piece states failed with HTTP status: {$statusCode}",
+                'HTTP_STATUS_ERROR',
+                [
+                    'status_code' => $statusCode,
+                    'response_data' => $responseData,
+                ],
+                $this->getBasePath() . $request->getEndpoint(),
+                'GET',
+                null,
+                ['request_summary' => $request->getSummary()]
+            );
+        }
+
+        // 解析JSON响应
+        $decodedResponse = json_decode($responseData, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new ApiRuntimeException(
+                'Failed to decode torrent piece states JSON response: ' . json_last_error_msg(),
+                'JSON_DECODE_ERROR',
+                [
+                    'json_error' => json_last_error(),
+                    'response_data' => $responseData,
+                ],
+                $this->getBasePath() . $request->getEndpoint(),
+                'GET',
+                null,
+                ['request_summary' => $request->getSummary()]
+            );
+        }
+
+        // 创建成功响应
+        return TorrentPieceStatesResponse::fromApiResponse($decodedResponse, $request->getHash());
+    }
+
+    /**
      * 设置下载位置（别名方法）
      *
      * @param array<string> $hashes 种子哈希列表
@@ -1298,6 +1611,100 @@ class TorrentAPI implements ApiInterface
     {
         $hashesString = implode('|', $hashes);
         return $this->setTorrentLocation($hashesString, $location);
+    }
+
+    /**
+     * 获取种子文件列表（类型化实现）
+     *
+     * @param GetTorrentFilesRequest $request 文件列表请求
+     * @return TorrentFilesResponse 文件列表响应
+     * @throws NetworkException 网络异常
+     * @throws ValidationException 验证异常
+     * @throws ApiRuntimeException API运行时异常
+     */
+    public function getTorrentFiles(GetTorrentFilesRequest $request): TorrentFilesResponse
+    {
+        // 验证请求
+        $validation = $request->validate();
+        if (!$validation->isValid()) {
+            throw new ValidationException(
+                'GetTorrentWebSeeds request validation failed',
+                'VALIDATION_ERROR',
+                $validation->getErrors()
+            );
+        }
+
+        try {
+            // 发送请求
+            $url = $this->getBasePath() . $request->getEndpoint();
+            $transportResponse = $this->transport->get(
+                $url,
+                $request->toArray(),
+                $request->getHeaders()
+            );
+
+            // 处理Torrent文件列表响应
+            return $this->handleTorrentFilesResponse($transportResponse, $request);
+
+        } catch (NetworkException $e) {
+            throw new ApiRuntimeException(
+                'Get torrent webseeds failed due to network error: ' . $e->getMessage(),
+                'GET_TORRENT_WEBSEEDS_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url ?? '',
+                'GET',
+                null,
+                ['request_summary' => $request->getSummary()],
+                $e
+            );
+        }
+    }
+
+    /**
+     * 获取Torrent Trackers
+     *
+     * @param GetTorrentTrackersRequest $request 获取Torrent Trackers请求
+     * @return TorrentTrackersResponse Torrent Trackers响应
+     * @throws NetworkException 网络异常
+     * @throws ValidationException 验证异常
+     * @throws ApiRuntimeException API运行时异常
+     */
+    public function getTorrentTrackers(GetTorrentTrackersRequest $request): TorrentTrackersResponse
+    {
+        // 验证请求
+        $validation = $request->validate();
+        if (!$validation->isValid()) {
+            throw new ValidationException(
+                'GetTorrentTrackers request validation failed',
+                'VALIDATION_ERROR',
+                $validation->getErrors()
+            );
+        }
+
+        try {
+            // 发送请求
+            $url = $this->getBasePath() . $request->getEndpoint();
+            $transportResponse = $this->transport->get(
+                $url,
+                $request->toArray(),
+                $request->getHeaders()
+            );
+
+            // 处理响应
+            return $this->handleTorrentTrackersResponse($transportResponse, $request);
+
+        } catch (NetworkException $e) {
+            throw new ApiRuntimeException(
+                'Get torrent trackers failed due to network error: ' . $e->getMessage(),
+                'GET_TORRENT_TRACKERS_NETWORK_ERROR',
+                ['original_error' => $e->getMessage()],
+                $url ?? '',
+                'GET',
+                null,
+                ['request_summary' => $request->getSummary()],
+                $e
+            );
+        }
     }
 
     /**
